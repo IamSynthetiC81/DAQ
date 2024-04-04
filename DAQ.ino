@@ -189,7 +189,7 @@ void readMPU6050(Adafruit_MPU6050 mpu ,log_t* log){
   log->gyroZ = &g.gyro.z;
 }
 void readVariousSensors(log_t* log){
-  log->brakePressure = (analogRead(A2)-0.5);
+  log->brakePressure = (ReadVoltage(A2)-0.5)*11.5;
   log->tps = ReadVoltage(A1)/SupplyVoltage;
   log->potValue = ((analogRead(potPin)/1023.0)-0.5)*SteeringWheel_RotationalRange/2;
 }
@@ -256,30 +256,11 @@ void loop() {
     if (recording) {
       digitalWrite(ledPin, HIGH);
 
-      // float accelerationX = a.acceleration.x;
-      // float accelerationY = a.acceleration.y;
-      // float accelerationZ = a.acceleration.z;
-      // float roll = atan2(a.acceleration.y, a.acceleration.z) * 180.0 / PI;
-      // float pitch = atan2(-a.acceleration.x, sqrt(a.acceleration.y * a.acceleration.y + a.acceleration.z * a.acceleration.z)) * 180.0 / PI;
-
-      // gyroX = g.gyro.x;
-      // gyroY = g.gyro.y;
-      // gyroZ = g.gyro.z;
-
-    
-      // Calculate yaw using gyro readings
-      // yaw += (gyroZ / 131.0) * (interval / 1000.0); // 131.0 is the sensitivity scale factor for the gyro (datasheet)
-
-      // float brakePressure = analogRead(A2) * (4.5 / 1023) * 10.21; // Convert analog reading to brake pressure (in psi)
-      // float tps = (analogRead(A1) / 1023.0) * 100; // Calculate TPS percentage
-
-      
-
       // float samplingRate = 1000.0 / interval;
       float elapsedTimeSec = currentMillis / 1000.0;
 
-      readMPU6050(mpu,log);
-      readGPS(log);                                            // Wait for VTG messsage and print speed in serial.  
+      readMPU6050(mpu,log);                                     // Read data from MPU6050
+      readGPS(log);                                             // Wait for VTG messsage and print speed in serial.  
       readVariousSensors(log);
 
       WriteToSD(log);
