@@ -10,8 +10,10 @@ static uint8_t SupplyVoltage = 5;
 #define SupplyVoltageSense_Ratio 5.99
 #define SupplyVoltageSense_Pin 0
 
-#define adc_bit_width 10
-#define ReadVoltage(Pin) (SupplyVoltage*analogRead(Pin)/pow(2,adc_bit_width))
+#define ADC_bit_range 1023                                                // 10 bit ADC;
+#define ReadVoltage(Pin) (SupplyVoltage*analogRead(Pin)/ADC_bit_range)    // Reads Voltage
+
+#define SteeringWheel_RotationalRange 270
 
 typedef struct information{
   uint8_t counter;
@@ -29,7 +31,7 @@ typedef struct information{
   float samplingRate;
   unsigned long elapsedTime;
   float elapsedTimeSeconds;
-  uint8_t potValue;
+  byte potValue;
   float SpeedGPS;
 } log_t;
 
@@ -53,8 +55,8 @@ int counter = 0;
 unsigned long previousMillis = 0;
 unsigned long interval = 1;
 
-float gyroX, gyroY, gyroZ;
-float yaw = 0.0; // Initialize yaw angle
+// float gyroX, gyroY, gyroZ;
+// float yaw = 0.0; // Initialize yaw angle
 
 // Define the analog pin where the potentiometer is connected
 const int potPin = A1;
@@ -189,7 +191,7 @@ void readMPU6050(Adafruit_MPU6050 mpu ,log_t* log){
 void readVariousSensors(log_t* log){
   log->brakePressure = (analogRead(A2)-0.5);
   log->tps = ReadVoltage(A1)/SupplyVoltage;
-  log->potValue = analogRead(potPin);
+  log->potValue = ((analogRead(potPin)/1023.0)-0.5)*SteeringWheel_RotationalRange/2;
 }
 void Calc_Rotation_XYZ(log_t* log){
   log->roll  = atan2(*log->accelerationY, *log->accelerationZ) * 180.0 / PI;
