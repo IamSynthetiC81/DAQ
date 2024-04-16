@@ -8,8 +8,8 @@
 #include <math.h>
 #include <string.h>
 
-#define SERIAL_LOGGIN 1
-#define SD_LOGGIN 0
+#define SERIAL_LOGGIN false
+#define SD_LOGGIN false
 
 static uint8_t SupplyVoltage = 5;
 #define	SupplyVoltageSense_Ratio 5.99
@@ -303,7 +303,7 @@ ISR(TIMER1_COMPA_vect){
   if (WINDOW){
     ERROR = true;
     ErrorFlag |= 0x01;
-    Serial.println(F("Timer Overflow"));
+    // Serial.println(F("Timer Overflow"));
   }
   WINDOW = !WINDOW;
 }
@@ -319,9 +319,19 @@ ISR(TIMER1_COMPA_vect){
  * @note The data is stored in the __LOG structure and can be printed using SerialPrintLog() function. 
  */
 void AquireData(){
+
+  unsigned long start = micros();
   readGPS();											                                          // Wait	for	VTG	messsage and print speed in	serial.	 
+  Serial.print(micros()-start);
+  Serial.print(",");
+  start = micros();
   readMPU6050();									                                          // Read data from	MPU6050
-  readVariousSensors();         
+  Serial.print(micros()-start);
+  Serial.print(",");
+  start = micros();
+  readVariousSensors();
+  Serial.println(micros()-start);
+    
 }
 
 void setup() {
@@ -386,6 +396,9 @@ void loop()	{
   // if (!SD_present) return;
 
   if	(recording)	{
+
+    readGPS();											                                          // Wait	for	VTG	messsage and print speed in	serial.	
+
     if (!WINDOW) return;
 
     double sum = 0;
