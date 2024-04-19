@@ -1,0 +1,19 @@
+
+
+// const PROGMEM uint8_t NESTED_VECTORED_ERROR_CONTROLLER[8];
+
+// #define REGISTER_GPS_ERROR 0
+// #define REGISTER_IMU_ERROR 1
+// #define REGISTER_SDC_ERROR 2
+// #define REGISTER_ARD_ERROR 3
+// #define REGISTER_INT_ERROR 4
+// #define REGISTER_TIM_ERROR 5
+// #define REGISTER_GN1_ERROR 6
+// #define REGISTER_GN2_ERROR 7
+
+// #define ERROR_BAUD_RATE_MISMATCH 0
+// #define ERROR_GPS_PORT_INACTIVE 1
+// #define ERROR_GPS_DATA_INVALID 2
+// #define ERROR_
+
+// void 

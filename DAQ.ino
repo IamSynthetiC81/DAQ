@@ -47,8 +47,12 @@ static bool SD_present = false;
 static volatile bool ERROR = false;
 /**
  * @brief Flag to indicate an error in the system
- *  01. Bit 00: Timer Overflow
- *  02. Bit 01: Aquisition Timed-Up
+ *  01. Timer Overflow
+ *  02. Aquisition Timed-Up
+ *  03. DMP Init Fail
+ *  04. IMU Init Fail
+ *  05. SD  Init Fail
+ *  06. GPS Fail Init
  */
 static volatile uint8_t ErrorFlag = false;
 static volatile bool WINDOW = false;
@@ -73,12 +77,12 @@ static volatile bool WINDOW = false;
  * @see SerialPrintLog() 
  */
 typedef	struct information{
-  float accelerationX;
-  float accelerationY;
-  float accelerationZ;
-  float gyroX;
-  float gyroY;
-  float gyroZ;
+  uint16_t accelerationX;
+  uint16_t accelerationY;
+  uint16_t accelerationZ;
+  uint16_t gyroX;
+  uint16_t gyroY;
+  uint16_t gyroZ;
   float	brakePressure;
   float	tps;
   uint8_t potValue;
@@ -95,7 +99,7 @@ log_t __LOG;
 /**
  * @brief Prints the log values to the Serial Monitor according to the format.
  */
-void SerialPrintLog(){
+inline void __attribute__ ((always_inline))  SerialPrintLog(){
     const PROGMEM uint8_t BufferSize = 256;
     char buffer[BufferSize];
 
@@ -125,15 +129,6 @@ void SerialPrintLog(){
 }
 
 MPU6050 mpu;
-Quaternion q;                                                                 // [w, x, y, z]         quaternion container
-VectorInt16 aa;                                                               // [x, y, z]            accel sensor measurements
-VectorInt16 gy;                                                               // [x, y, z]            gyro sensor measurements
-VectorInt16 aaReal;                                                           // [x, y, z]            gravity-free accel sensor measurements
-VectorInt16 aaWorld;                                                          // [x, y, z]            world-frame accel sensor measurements
-VectorFloat gravity;                                                          // [x, y, z]            gravity vector
-uint8_t fifoBuffer[64];                                                       // FIFO storage buffer
-float euler[3];                                                               // [psi, theta, phi]    Euler angle container
-
 File dataFile;                                                                // File to store the data
 
 void MPU6050_init(){
@@ -149,8 +144,8 @@ void MPU6050_init(){
     Serial.println(F("\t\tPASS")); 
     IMU_present = true ;
     
-    Serial.print(F(" |--Initializing DMP"));                                // load and configure the DMP
-    devStatus = mpu.dmpInitialize();
+    // Serial.print(F(" |--Initializing DMP"));                                // load and configure the DMP
+    // devStatus = mpu.dmpInitialize();
   } else
     Serial.println(F("MPU6050 connection failed"));
   
@@ -159,9 +154,9 @@ void MPU6050_init(){
     mpu.CalibrateAccel(15);                                                   // Calibration Time: generate offsets and calibrate our MPU6050
     mpu.CalibrateGyro(15);                                                    // 
     
-    Serial.print(F("\n |--Enabling DMP:"));
-    mpu.setDMPEnabled(true);
-    Serial.println(F("\t\t\tPASS")); 
+    // Serial.print(F("\n |--Enabling DMP:"));
+    // mpu.setDMPEnabled(true);
+    // Serial.println(F("\t\t\tPASS")); 
 
     packetSize = mpu.dmpGetFIFOPacketSize();                                  // get expected DMP packet size for later comparison
 
@@ -176,73 +171,6 @@ void MPU6050_init(){
     Serial.println(F(")"));
   }
 }
-/**
- * @brief Reads the GPS data from the Serial1 port and parses the data to get the speed.
- * 
- * @note The speed is stored in the __LOG structure and the GPS_Valid flag is set to true, meaning the speed is updated from the GPS.
- * @see NMNEA_Parser.h
- * 
- */
-void readGPS(){
-  __LOG.GPS_Valid = false;
-  while(Serial1.available()){
-    int bufsize = 256;
-    char buf[bufsize];
-    String	something =	Serial1.readStringUntil('\n');	                      //	Read the GPS data
-
-    if (!something.substring(3).startsWith("VTG")) return;                    // If the data is not VTG, return
-    
-    something.toCharArray(buf,bufsize);				                                // Convert the GPS data to char array
-    packet_t packet = read(buf);                                              // Parse the GPS data
-    __LOG.SpeedGPS = packet.message.VTG.SpeedOverGround;                      // Get the speed from the GPS data
-    __LOG.GPS_Valid = true;                                                   // Mark the GPS data as valid
-  }
-}
-/**
- * @brief Reads the data from the MPU6050 and stores the data in the __LOG structure. 
- */
-void readMPU6050(){
-  if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer)) {                              // Get the Latest packet 
-    mpu.dmpGetQuaternion(&q, fifoBuffer);                                     // Get the Quaternion
-    mpu.dmpGetAccel(&aa, fifoBuffer);                                         // Get the Acceleration
-    mpu.dmpGetGravity(&gravity, &q);                                          // Get the Gravity
-    mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);                            // Get the Linear Acceleration
-    mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);                      // Get the Linear Acceleration in World Frame (acceleration - gravity)
-    
-    __LOG.accelerationX = aaWorld.x;
-    __LOG.accelerationY = aaWorld.y;
-    __LOG.accelerationZ = aaWorld.z;
-
-    mpu.dmpGetEuler(euler, &q);                                               // Get the Euler Angles
-    
-    __LOG.gyroX = euler[0] * 180 / M_PI;
-    __LOG.gyroY = euler[1] * 180 / M_PI;
-    __LOG.gyroZ = euler[2] * 180 / M_PI;
-  }
-}
-/**
- * @brief Calibrates the ADC, reads brake pressure, throttle position sensor and potentiometer values and stores them in the __LOG structure.
- * @see CalibrateSupplyVoltage()
- */
-void readVariousSensors(){
-  CalibrateSupplyVoltage();                                                   // Calibrate the supply voltage
-  __LOG.brakePressure = (ReadVoltage(A2)-0.5)*11.5;                           // Read the Brake Pressure
-  __LOG.tps = ReadVoltage(A1)/SupplyVoltage;                                  // Read the Throttle Position Sensor
-  __LOG.potValue	= ((analogRead(potPin)/1023.0)-0.5)*SteeringWheel_RotationalRange/2;  // Read the Potentiometer value
-}
-/**
- * @brief Writes the log values to the SD card in the format of a CSV file.
- */
-void WriteToSD(){
-  const PROGMEM uint8_t BufferSize = 256;
-  char buffer[BufferSize];
-    
-  snprintf(buffer, 256, BufferSize, "%f,%f,%f,%f,%f,%f,%f,%f,%d,%f,%d,%lf\n",__LOG.accelerationX,__LOG.accelerationY,__LOG.accelerationZ,__LOG.gyroX,__LOG.gyroY,__LOG.gyroZ,__LOG.brakePressure,__LOG.tps,__LOG.potValue, __LOG.SpeedGPS, __LOG.GPS_Valid, __LOG.elapsedTime );
-  
-  dataFile.print(buffer);
-  dataFile.flush();
-}
-
 void initTimers(){
   uint8_t sps = 0;
   
@@ -286,6 +214,103 @@ void initTimers(){
 
   sei();                                                                        // Enable all interrupts                                                                 
 } 
+void initGPS(){
+  const PROGMEM char COMMAND_SET_UPDATE_RATE_10Hz_RAM = "B5 62 06 8A 0A 00 01 01 00 00 01 00 21 30 64 00 52 C3";
+  const PROGMEM char COMMAND_SET_UPDATE_RATE_10Hz_BBR = "B5 62 06 8A 0A 00 01 02 00 00 01 00 21 30 64 00 53 CC";
+  const PROGMEM char COMMAND_SET_VTG_MESSAGE_ONLY_RAM = "B5 62 06 8A 09 00 01 01 00 00 01 00 74 10 00 20 BB";
+  const PROGMEM char COMMAND_SET_VTG_MESSAGE_ONLY_BBR = "B5 62 06 8A 09 00 01 02 00 00 01 00 74 10 00 21 C3";
+  const PROGMEM char COMMAND_set_BAUDE_RATE_115200_RAM = "B5 62 06 8A 0C 00 01 01 00 00 01 00 52 40 00 C2 01 00 F4 B1";
+  const PROGMEM char COMMAND_set_BAUDE_RATE_115200_BBR = "B5 62 06 8A 0C 00 01 02 00 00 01 00 52 40 00 C2 01 00 F5 BC";
+
+//     Serial1.write(COMMAND_DISABLE_ALL_MESSAGES);
+//     Serial.print(".");
+//     waitForAck();
+
+//     Serial1.write(COMMAND_ENABLE_VTG_MESSAGE);
+//     Serial.print(".");
+//     waitForAck();
+
+//     Serial1.write(COMMAND_BAUDE_RATE_115200);
+//     Serial.print(".");
+//     waitForAck();
+
+    
+//     Serial1.flush();                                                          // wait for last transmitted data to be sent 
+//     Serial1.begin(115200);                                                    // Start with new baud rate
+//     while(Serial1.available()) Serial.read();                                 // empty  out possible garbage from input buffer
+
+//     Serial1.write(COMMAND_UPDATE_RATE_10Hz);
+//     Serial.print(".");
+//     waitForAck();  
+}
+
+void waitForAck() {
+  const PROGMEM uint8_t UBX_ACK_ACK_HEADER[] = {0xB5, 0x62, 0x05, 0x01};
+  uint8_t buffer[10];
+  uint8_t index = 0;
+
+  while (Serial.available()) {                                                // Wait for data to be available on the serial port
+    uint8_t byte = Serial.read();                                             // Read a byte from the serial port
+    if (byte == UBX_ACK_ACK_HEADER[index]) {                                  // Check if the byte matches the expected header
+      buffer[index++] = byte;                                                 // Byte matches, so add it to the buffer and increment the index
+      if (index == sizeof(UBX_ACK_ACK_HEADER))                                // Check if we've received the complete header
+        break;                                                                // We've received the complete header, so we can stop waiting
+    } else {                                                                  // Byte doesn't match, so reset the index and buffer
+      index = 0;
+      memset(buffer, 0, sizeof(buffer));
+    }
+  }
+}
+
+/**
+ * @brief Reads the GPS data from the Serial1 port and parses the data to get the speed.
+ * 
+ * @note The speed is stored in the __LOG structure and the GPS_Valid flag is set to true, meaning the speed is updated from the GPS.
+ * @see NMNEA_Parser.h
+ * 
+ */
+inline void __attribute__ ((always_inline))  readGPS(){
+  __LOG.GPS_Valid = false;
+  if(Serial1.available()){
+    int bufsize = 256;
+    char buf[bufsize];
+    String	something =	Serial1.readStringUntil('\n');	                      //	Read the GPS data
+    if (!something.substring(3).startsWith("VTG")) return;                    // If the data is not VTG, return
+    
+    something.toCharArray(buf,bufsize);				                                // Convert the GPS data to char array
+    packet_t packet = read(buf);                                              // Parse the GPS data
+    __LOG.SpeedGPS = packet.message.VTG.SpeedOverGround;                      // Get the speed from the GPS data
+    __LOG.GPS_Valid = true;                                                   // Mark the GPS data as valid
+  }
+}
+/**
+ * @brief Reads the data from the MPU6050 and stores the data in the __LOG structure. 
+ */
+inline void __attribute__ ((always_inline))  readMPU6050(){
+  mpu.getMotion6(&__LOG.accelerationX, &__LOG.accelerationY, &__LOG.accelerationZ, &__LOG.gyroX, &__LOG.gyroY, &__LOG.gyroZ);
+}
+/**
+ * @brief Calibrates the ADC, reads brake pressure, throttle position sensor and potentiometer values and stores them in the __LOG structure.
+ * @see CalibrateSupplyVoltage()
+ */
+inline void __attribute__ ((always_inline))  readVariousSensors(){
+  CalibrateSupplyVoltage();                                                   // Calibrate the supply voltage
+  __LOG.brakePressure = (ReadVoltage(A2)-0.5)*11.5;                           // Read the Brake Pressure
+  __LOG.tps = ReadVoltage(A1)/SupplyVoltage;                                  // Read the Throttle Position Sensor
+  __LOG.potValue	= ((analogRead(potPin)/1023.0)-0.5)*SteeringWheel_RotationalRange/2;  // Read the Potentiometer value
+}
+/**
+ * @brief Writes the log values to the SD card in the format of a CSV file.
+ */
+inline void __attribute__ ((always_inline))  WriteToSD(){
+  const PROGMEM uint8_t BufferSize = 256;
+  char buffer[BufferSize];
+    
+  snprintf(buffer, 256, BufferSize, "%f,%f,%f,%f,%f,%f,%f,%f,%d,%f,%d,%lf\n",__LOG.accelerationX,__LOG.accelerationY,__LOG.accelerationZ,__LOG.gyroX,__LOG.gyroY,__LOG.gyroZ,__LOG.brakePressure,__LOG.tps,__LOG.potValue, __LOG.SpeedGPS, __LOG.GPS_Valid, __LOG.elapsedTime );
+  
+  dataFile.print(buffer);
+  dataFile.flush();
+}
 
 void ISR_startRecording(){
   recording = true;
@@ -293,7 +318,6 @@ void ISR_startRecording(){
   StartTime = millis();
   digitalWrite(LED, HIGH);
 }
-
 void ISR_stopRecording(){
   recording = false;
   digitalWrite(LED, LOW);
@@ -303,13 +327,13 @@ ISR(TIMER1_COMPA_vect){
   if (WINDOW){
     ERROR = true;
     ErrorFlag |= 0x01;
-    // Serial.println(F("Timer Overflow"));
+    // Serial.println(ErrorFlag);
   }
   WINDOW = !WINDOW;
 }
 
 /**
- * @brief Run the data acquisition process. 
+ * @brief Run the data acquisition routine. 
  * @note The data acquisition process includes reading the GPS data, reading the MPU6050 data, reading the various sensors and storing the data in the __LOG structure.
  * @see readGPS()
  * @see readMPU6050()
@@ -318,20 +342,24 @@ ISR(TIMER1_COMPA_vect){
  * 
  * @note The data is stored in the __LOG structure and can be printed using SerialPrintLog() function. 
  */
-void AquireData(){
+inline void __attribute__ ((always_inline))  AquireData(){
+  
+  unsigned long t1 ,t2,t3,t4;
+  t1 = micros();
 
-  unsigned long start = micros();
-  readGPS();											                                          // Wait	for	VTG	messsage and print speed in	serial.	 
-  Serial.print(micros()-start);
-  Serial.print(",");
-  start = micros();
+  readGPS();			                                                          // Wait	for	VTG	messsage and print speed in	serial.	 
+  t2 = micros();
   readMPU6050();									                                          // Read data from	MPU6050
-  Serial.print(micros()-start);
-  Serial.print(",");
-  start = micros();
+  t3 = micros();
   readVariousSensors();
-  Serial.println(micros()-start);
-    
+  t4 = micros();
+
+  Serial.print(t2-t1);
+  Serial.print(",");
+  Serial.print(t3-t2);
+  Serial.print(",");
+  Serial.print(t4-t3);
+  Serial.println("\n");
 }
 
 void setup() {
@@ -364,6 +392,8 @@ void setup() {
   
   Serial.print(F("\nInitializing SD card :"));
   if (!SD.begin(10) && SD_LOGGIN) {                                           // SD card initialization
+    ERROR = true;
+    ErrorFlag = 0x05;
     Serial.println(F("SD initialization failed!\n\tFix and reboot to contrinue\n"));
     return;
   }
@@ -373,8 +403,19 @@ void setup() {
   
 
   Serial.print(F("Opening Serial1 port at 9600 baud :"));
-  Serial1.begin(9600);		                                                    // Serial1 port connected	to GPS
-  Serial1 ? Serial.println(F("\tPASS ")) : Serial.println(F("FAIL"));
+  Serial1.begin(9600);                                                      // Serial1 port connected	to GPS
+  if(Serial1){
+    Serial.println(F("\tPASS "));
+  } else {
+    ERROR = true;
+    ErrorFlag = 0x06;
+    
+    Serial.println(F("FAIL"));
+  }
+
+  Serial.print(F("Initializing GPS :"));
+  initGPS();
+  Serial.println(F("\t\tPASS "));
 
   Serial.print(F("Initializing FreqMeasure :"));
   FreqMeasure.begin();                                                        // Initialize the FreqMeasure library
@@ -392,13 +433,10 @@ void setup() {
 }
 
 void loop()	{
-  // if (!IMU_present) return;
-  // if (!SD_present) return;
+  if (!IMU_present) return;
+  if (!SD_present) return;
 
   if	(recording)	{
-
-    readGPS();											                                          // Wait	for	VTG	messsage and print speed in	serial.	
-
     if (!WINDOW) return;
 
     double sum = 0;
