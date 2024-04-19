@@ -1,34 +1,70 @@
 clear; clc; close all;
 %% Data parse
+filename = 'putty.txt';
 
-file_path = 'putty.txt';
+fid = fopen(filename, 'r');
+% Check if file exists
+if fileID == -1
+    error('File not found');
+end
 
-% Read all lines from the text file
-fid = fopen(file_path, 'r');
-lines = textscan(fid, '%s', 'Delimiter', '\n');
+% lines = readlines("putty.txt");
 
-fclose(fid);
+% Initialize the variables
+data = [];
 
 % Initialize arrays to store accelerometer data
-num_lines = length(lines{1});
-acc_x = zeros(num_lines, 1);
-acc_y = zeros(num_lines, 1);
-acc_z = zeros(num_lines, 1);
+num_lines = length(lines);
+accX = zeros(num_lines,1);
+accY = zeros(num_lines,1);
+accZ = zeros(num_lines,1);
+gyrX = zeros(num_lines,1);
+gyrY = zeros(num_lines,1);
+gyrZ = zeros(num_lines,1);
 time = zeros(num_lines, 1);
-
-G = 9.81;
 
 % Parse data from each line
 for i = 1:num_lines
     % disp(lines{0,0}{i});
-    line_data = sscanf(lines{1,1}{i}, '%f,%f,%f,%f,%f,%f,%d,%d');
-    acc_x(i) = G*line_data(1)/16384.0;
-    acc_y(i) = G*line_data(2)/16384.0;
-    acc_z(i) = G*line_data(3)/16384.0;
-    time(i) = line_data(8)/1000;
+    line_data = sscanf(lines(i), "%s,%f,%f,%d,%f,%d,%d");
+
+    ax = typecast(uint8(buffer(1:2)), 'int16');
+    ay = typecast(uint8(buffer(3:4)), 'int16');
+    az = typecast(uint8(buffer(5:6)), 'int16');
+    gx = typecast(uint8(buffer(9:10)), 'int16');
+    gy = typecast(uint8(buffer(11:12)), 'int16');
+    gz = typecast(uint8(buffer(13:14)), 'int16');
+
+    accX(i) = (line_data(1)-2^15)/16384.0;
+    accY(i) = (line_data(2)-2^15)/16384.0;
+    accZ(i) = (line_data(3)-2^15)/16384.0;
+   
+    gyrX(i) = line_data(3)/ 131.0;
+    gyrY(i) = line_data(4)/ 131.0;
+    gyrZ(i) = line_data(5)/ 131.0;
+
+    time(i) = line_data(12)/1000;
 end
 
-time = time-time(1);
+
+fclose(fid);
+
+% Extract the data
+uint8_data = data(:, 1:64);
+float1_data = data(:, 65);
+float2_data = data(:, 66);
+int1_data = data(:, 67);
+float3_data = data(:, 68);
+int2_data = data(:, 69);
+int3_data = data(:, 70);
+
+% time = time-time(1);
+% 
+% acc_xy = sqrt(accX.^2+accY.^2);
+% 
+% plot(time, acc_xy);
+
+
 
 %% Sampling Rate 
 figure('Name','Sampling Rate Data','NumberTitle','off');
@@ -67,9 +103,9 @@ fprintf("Sampling Frequency = %1.1d \x00B1 %1.1d\n",Fs,1/dt_e);
 %% Raw Data
 figure('Name','Raw Data','NumberTitle','off');
 
+G=9.81;
 
-
-acc_xy = sqrt(acc_x.^2+acc_y.^2);
+acc_xy = sqrt(accX.^2+accY.^2);
 
 acc_xy_km_h = acc_xy/12959.99997097;
 hours = time/3600;
@@ -98,32 +134,6 @@ ylim([-60,100]);
 title('Frequency Domain Plot');
 xlabel('Frequency')
 ylabel('Power (dB)')
-
-%% Applying Moving-Average Filter
-figure('Name','Moving Average Filter','NumberTitle','off');
-
-subplot(2,1,1);
-plot(time,speed_xy); grid minor;
-legend("Acceleration on X-Y","Speed");
-
-xlabel("Time (s)");
-ylabel('Calculated speed (Km/h)');
-
-
-
-for length = logspace(1,6,6)
-    F = filter(1/length * ones(length ,1),1,speed_xy);
-    subplot(2,1,2);
-    plot(time,F); hold on;
-
-    
-end
-legend("Length = 10^1","Length = 10^2","Length = 10^3","Length = 10^4","Length = 10^5","Length = 10^6");
-
-title("Filtered X-Y Measurements");
-xlabel("Time (s)");
-ylabel('Calculated speed (Km/h)');
-grid minor;
 
 %% Applying a Low-Pass Filter
 figure('Name','Low Pass Filter','NumberTitle','off');
@@ -166,6 +176,32 @@ xlabel("Time (s)");
 ylabel('Calculated speed (Km/h)');
 grid minor;
 
+%% Applying Moving-Average Filter
+figure('Name','Moving Average Filter','NumberTitle','off');
+
+subplot(2,1,1);
+plot(time,speed_xy); grid minor;
+legend("Acceleration on X-Y","Speed");
+
+xlabel("Time (s)");
+ylabel('Calculated speed (Km/h)');
+
+for length = logspace(1,6,6)
+    F = filter(1/length * ones(length ,1),1,speed_xy);
+    subplot(2,1,2);
+    plot(time,F); hold on;
+
+    
+end
+legend("Length = 10^1","Length = 10^2","Length = 10^3","Length = 10^4","Length = 10^5","Length = 10^6");
+
+title("Filtered X-Y Measurements");
+xlabel("Time (s)");
+ylabel('Calculated speed (Km/h)');
+grid minor;
+
+
+
 %%
 
 function [power0,f0] = FFT(y,num_lines,Fs)
@@ -177,4 +213,15 @@ function [power0,f0] = FFT(y,num_lines,Fs)
     f0 = (-num_lines/2:num_lines/2-1)*(Fs/num_lines);       % 0-centered frequency range
     power0 = abs(y0).^2/num_lines;                          % 0-centered power
 
+end
+
+
+Sure, here’s the equivalent MATLAB code for the given C++ function:
+
+function [ax, ay, az, gx, gy, gz] = getMotion6(devAddr, buffer)
+    % Read bytes from the device
+    buffer = I2Cdev.readBytes(devAddr, MPU6050_RA_ACCEL_XOUT_H, 14, I2Cdev.readTimeout, wireObj);
+    
+    % Extract acceleration and gyroscope data
+    
 end
