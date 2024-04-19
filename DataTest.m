@@ -4,11 +4,11 @@ filename = 'putty.txt';
 
 fid = fopen(filename, 'r');
 % Check if file exists
-if fileID == -1
+if fid == -1
     error('File not found');
 end
 
-% lines = readlines("putty.txt");
+lines = readlines("putty.txt");
 
 % Initialize the variables
 data = [];
@@ -26,14 +26,14 @@ time = zeros(num_lines, 1);
 % Parse data from each line
 for i = 1:num_lines
     % disp(lines{0,0}{i});
-    line_data = sscanf(lines(i), "%s,%f,%f,%d,%f,%d,%d");
+    line_data = sscanf(lines(i), "%d,%d,%d,%d,%d,%d,%f,%f,%d,%f,%d,%d");
 
-    ax = typecast(uint8(buffer(1:2)), 'int16');
-    ay = typecast(uint8(buffer(3:4)), 'int16');
-    az = typecast(uint8(buffer(5:6)), 'int16');
-    gx = typecast(uint8(buffer(9:10)), 'int16');
-    gy = typecast(uint8(buffer(11:12)), 'int16');
-    gz = typecast(uint8(buffer(13:14)), 'int16');
+    % ax = typecast(uint8(buffer(1:2)), 'int16');
+    % ay = typecast(uint8(buffer(3:4)), 'int16');
+    % az = typecast(uint8(buffer(5:6)), 'int16');
+    % gx = typecast(uint8(buffer(9:10)), 'int16');
+    % gy = typecast(uint8(buffer(11:12)), 'int16');
+    % gz = typecast(uint8(buffer(13:14)), 'int16');
 
     accX(i) = (line_data(1)-2^15)/16384.0;
     accY(i) = (line_data(2)-2^15)/16384.0;
@@ -50,18 +50,18 @@ end
 fclose(fid);
 
 % Extract the data
-uint8_data = data(:, 1:64);
-float1_data = data(:, 65);
-float2_data = data(:, 66);
-int1_data = data(:, 67);
-float3_data = data(:, 68);
-int2_data = data(:, 69);
-int3_data = data(:, 70);
+% uint8_data = data(:, 1:64);
+% float1_data = data(:, 65);
+% float2_data = data(:, 66);
+% int1_data = data(:, 67);
+% float3_data = data(:, 68);
+% int2_data = data(:, 69);
+% int3_data = data(:, 70);
 
 % time = time-time(1);
-% 
-% acc_xy = sqrt(accX.^2+accY.^2);
-% 
+
+acc_xy = sqrt(accX.^2+accY.^2);
+
 % plot(time, acc_xy);
 
 
@@ -215,13 +215,10 @@ function [power0,f0] = FFT(y,num_lines,Fs)
 
 end
 
-
-Sure, here’s the equivalent MATLAB code for the given C++ function:
-
-function [ax, ay, az, gx, gy, gz] = getMotion6(devAddr, buffer)
-    % Read bytes from the device
-    buffer = I2Cdev.readBytes(devAddr, MPU6050_RA_ACCEL_XOUT_H, 14, I2Cdev.readTimeout, wireObj);
-    
-    % Extract acceleration and gyroscope data
-    
-end
+% function [ax, ay, az, gx, gy, gz] = getMotion6(devAddr, buffer)
+%     % Read bytes from the device
+%     buffer = I2Cdev.readBytes(devAddr, MPU6050_RA_ACCEL_XOUT_H, 14, I2Cdev.readTimeout, wireObj);
+% 
+%     % Extract acceleration and gyroscope data
+% 
+% end
