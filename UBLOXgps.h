@@ -1,213 +1,85 @@
-#include <stdint.h>
-#include "Stream.h"
-#include "HardwareSerial.h"
+#include <HardwareSerial.h>
 
-#define GPS_DEFAULT_BAUDRATE 9600
+#ifndef __GPS_SERIAL__
+  #define __GPS_SERIAL__ Serial1
+#endif
 
-unsigned long baudrate;
-unsigned short rate;
+#ifndef __LOG_STREAM__
+  #define __LOG_STREAM__ Serial
+#endif
 
-HardwareSerial *__LOG_STREAM__ = NULL, *__GPS_STREAM__ = NULL;
+const uint8_t _TIMEOUT_ = 100;
 
-/* An array of possible baudrates that can be used by the GPS receiver, sorted descending to prevent excess Serial
- * flush/begin after restoring defaults. Uncomment values that can be used by the GPS receiver before the
- * auto-configuration.
- */ 
-const long gpsPossibleBaudrates[] = {
-    // 921600,
-    // 460800,
-    // 230400,
-    115200,
-    // 57600,
-    38400,
-    // 19200,
-    9600,
-    // 4800,
-};
+const PROGMEM char COMMAND_SET_UPDATE_RATE_10Hz_RAM[] = {0xB5,0x62, 0x06, 0x8A, 0x0A, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x21, 0x30, 0x64, 0x00, 0x52, 0xC3};
+const PROGMEM char COMMAND_SET_UPDATE_RATE_10Hz_BBR[] = {0xB5,0x62,0x06,0x8A,0x0A,0x00,0x01,0x02,0x00,0x00,0x01,0x00,0x21,0x30,0x64,0x00,0x53,0xCC};
+const PROGMEM char COMMAND_SET_VTG_MESSAGE_ONLY_RAM[] = {0xB5,0x62,0x06,0x8A,0x09,0x00,0x01,0x01,0x00,0x00,0x01,0x00,0x74,0x10,0x00,0x20,0xBB};
+const PROGMEM char COMMAND_SET_VTG_MESSAGE_ONLY_BBR[] = {0xB5,0x62,0x06,0x8A,0x09,0x00,0x01,0x02,0x00,0x00,0x01,0x00,0x74,0x10,0x00,0x21,0xC3};
+const PROGMEM char COMMAND_set_BAUDE_RATE_115200_RAM[] = {0xB5,0x62,0x06,0x8A,0x0C,0x00,0x01,0x01,0x00,0x00,0x01,0x00,0x52,0x40,0x00,0xC2,0x01,0x00,0xF4,0xB1};
+const PROGMEM char COMMAND_set_BAUDE_RATE_115200_BBR[] = {0xB5,0x62,0x06,0x8A,0x0C,0x00,0x01,0x02,0x00,0x00,0x01,0x00,0x52,0x40,0x00,0xC2,0x01,0x00,0xF5,0xBC};
 
-// Print a packet to the log serial port in a hexadecimal form.
-uint8_t printPacket(byte *packet, byte len){
-  if (__LOG_STREAM__) return 0xff;
+const PROGMEM char COMMAND_set_HIGH_CPU_CLOCK[] = {0xB5,0x62,0x06,0x41,0x10,0x00,0x03,0x00,0x05,0x1F,0x79,0xB2,0x0A,0xE5,0x28,0xEF,0x12,0x05,0x9F,0xFF,0xFF,0xFF,0x62,0xFB};
 
-  char temp[3];
+const PROGMEM char COMMAND_MESSAGE_PRECONFIGURATION_RAM[] = {0xB5,0x62,0x06,0x8A,0x45,0x00,0x01,0x01,0x00,0x00,0xCA,0x00,0x91,0x20,0x00,0xBB,0x00,0x91,0x20,0x01,0xB6,0x00,0x91,0x20,0x00,0xC0,0x00,0x91,0x20,0x00,0xD4,0x00,0x91,0x20,0x00,0xC5,0x00,0x91,0x20,0x00,0x01,0x04,0x91,0x20,0x00,0xAC,0x00,0x91,0x20,0x00,0xE8,0x00,0x91,0x20,0x00,0xB1,0x00,0x91,0x20,0x01,0xD9,0x00,0x91,0x20,0x00,0x02,0x00,0x92,0x20,0x00,0x07,0x00,0x92,0x20,0x07,0x9F,0x8A};
+const PROGMEM char COMMAND_MESSAGE_PRECONFIGURATION_BBR[] = {0xB5,0x62,0x06,0x8A,0x45,0x00,0x01,0x02,0x00,0x00,0xCA,0x00,0x91,0x20,0x00,0xBB,0x00,0x91,0x20,0x01,0xB6,0x00,0x91,0x20,0x00,0xC0,0x00,0x91,0x20,0x00,0xD4,0x00,0x91,0x20,0x00,0xC5,0x00,0x91,0x20,0x00,0x01,0x04,0x91,0x20,0x00,0xAC,0x00,0x91,0x20,0x00,0xE8,0x00,0x91,0x20,0x00,0xB1,0x00,0x91,0x20,0x01,0xD9,0x00,0x91,0x20,0x00,0x02,0x00,0x92,0x20,0x00,0x07,0x00,0x92,0x20,0x07,0xA0,0xCE};
 
-  for (byte i = 0; i < len; i++){
-    sprintf(temp, "%.2X", packet[i]);
-    __LOG_STREAM__->print(temp);
-
-    if (i != len - 1)
-        __LOG_STREAM__->print(' ');
-  }
-
-  __LOG_STREAM__->println();
-
-  return 0x01;
-}
+const PROGMEM char COMMAND_POLL_RESPONSE[] = {0xB5,0x62,0x06,0x8B,0x08,0x00,0x00,0x00,0x00,0x00,0x1F,0x00,0x31,0x10,0xF9,0x7F};
 
 void sendPacket(byte *packet, byte len){
-  if (__LOG_STREAM__) return 0xff;
-  if (__GPS_STREAM__) return 0xff;
+  for (byte i = 0; i < len; i++){
+      __GPS_SERIAL__.write(packet[i]);
+  }
+}
 
-    for (byte i = 0; i < len; i++){
-        __GPS_STREAM__->write(packet[i]);
+void waitForAck() {
+  const PROGMEM uint8_t UBX_ACK_ACK_HEADER[] = {0xB5, 0x62, 0x06, 0x8A};
+  uint8_t buffer[10];
+  uint8_t index = 0;
+
+  while (Serial1.available()) {                                               // Wait for data to be available on the serial port
+    uint8_t byte = Serial1.read();                                            // Read a byte from the serial port
+    if (byte == UBX_ACK_ACK_HEADER[index]) {                                  // Check if the byte matches the expected header
+      buffer[index++] = byte;                                                 // Byte matches, so add it to the buffer and increment the index
+      if (index == sizeof(UBX_ACK_ACK_HEADER)/sizeof(*UBX_ACK_ACK_HEADER)){                               // Check if we've received the complete header
+        return true;                                                          // We've received the complete header, so we can stop waiting
+      }
+    } else {                                                                  // Byte doesn't match, so reset the index and buffer
+      index = 0;
+      memset(buffer, 0, sizeof(buffer));
     }
-
-    printPacket(packet, len);
+  }
+  return false;
 }
 
-void restoreDefaults(){
-  // CFG-CFG packet.
-  byte packet[] = {
-      0xB5, // sync char 1
-      0x62, // sync char 2
-      0x06, // class
-      0x09, // id
-      0x0D, // length
-      0x00, // length
-      0xFF, // payload
-      0xFF, // payload
-      0x00, // payload
-      0x00, // payload
-      0x00, // payload
-      0x00, // payload
-      0x00, // payload
-      0x00, // payload
-      0xFF, // payload
-      0xFF, // payload
-      0x00, // payload
-      0x00, // payload
-      0x17, // payload
-      0x2F, // CK_A
-      0xAE, // CK_B
-  };
-
-  sendPacket(packet, sizeof(packet));
+void sendCommand(byte *command, byte len){
+  sendPacket(command, len);
+  return waitForAck();
 }
 
-void changeBaudrate(){
-    // CFG-PRT packet.
-    byte packet[] = {
-        0xB5, // sync char 1
-        0x62, // sync char 2
-        0x06, // class
-        0x00, // id
-        0x14, // length
-        0x00, // length
-        0x01, // payload
-        0x00, // payload
-        0x00, // payload
-        0x00, // payload
-        0xD0, // payload
-        0x08, // payload
-        0x00, // payload
-        0x00, // payload
-        0x00, // payload
-        0xC2, // payload
-        0x01, // payload
-        0x00, // payload
-        0x07, // payload
-        0x00, // payload
-        0x03, // payload
-        0x00, // payload
-        0x00, // payload
-        0x00, // payload
-        0x00, // payload
-        0x00, // payload
-        0xC0, // CK_A
-        0x7E, // CK_B
-    };
 
-    sendPacket(packet, sizeof(packet));
-}
 
-// Send a packet to the GPS receiver to change the frequency to 100 ms.
-void changeFrequency(){
-  // CFG-RATE packet.
-  byte packet[] = {
-    0xB5, // sync char 1
-    0x62, // sync char 2
-    0x06, // class
-    0x08, // id
-    0x06, // length
-    0x00, // length
-    0x64, // payload
-    0x00, // payload
-    0x01, // payload
-    0x00, // payload
-    0x01, // payload
-    0x00, // payload
-    0x7A, // CK_A
-    0x12, // CK_B
-  };
-  sendPacket(packet, sizeof(packet));
-}
-
-bool GPS_init(HardwareSerial *logStream, HardwareSerial *gpsStream, long targetBaudrate,  long targetRate){
+void initGPS(){
+  sendCommand(COMMAND_set_HIGH_CPU_CLOCK,sizeof(COMMAND_set_HIGH_CPU_CLOCK)/sizeof(*COMMAND_set_HIGH_CPU_CLOCK));
   
-  baudrate = targetBaudrate;
-  rate = targetRate; 
-
-  __LOG_STREAM__ = logStream;
-  __GPS_STREAM__ = gpsStream;
+  sendCommand(COMMAND_MESSAGE_PRECONFIGURATION_RAM,sizeof(COMMAND_MESSAGE_PRECONFIGURATION_RAM)/sizeof(*COMMAND_MESSAGE_PRECONFIGURATION_RAM));
   
-  // Restore the default GPS receiver configuration.
-  for (byte i = 0; i < sizeof(gpsPossibleBaudrates) / sizeof(*gpsPossibleBaudrates); i++){
-    
-    __LOG_STREAM__->print("Trying to restore defaults at ");
-    __LOG_STREAM__->print(gpsPossibleBaudrates[i]);
-    __LOG_STREAM__->println(" baudrate...");
-
-    if (i != 0){
-        delay(100); // Little delay before the flush.
-        __GPS_STREAM__->flush();
-    }
-
-    __GPS_STREAM__->begin(gpsPossibleBaudrates[i]);
-    restoreDefaults();
-  }
-
-  // Switch the GPS receiver serial configuration to the default baudrate.
-  if (gpsPossibleBaudrates[sizeof(gpsPossibleBaudrates) / sizeof(*gpsPossibleBaudrates) - 1] != GPS_DEFAULT_BAUDRATE){
-    
-    __LOG_STREAM__->print("Switching to the default baudrate which is ");
-    __LOG_STREAM__->print(GPS_DEFAULT_BAUDRATE);
-    __LOG_STREAM__->println("...");
-
-    delay(100); // Little delay before the flush.
-    __GPS_STREAM__->flush();
-    __GPS_STREAM__->begin(GPS_DEFAULT_BAUDRATE);
-  }
-
-  // Switch the GPS receiver serial configuration to the target baudrate.
-  if (baudrate != GPS_DEFAULT_BAUDRATE){
-      __LOG_STREAM__->print("Switching to the target baudrate which is ");
-      __LOG_STREAM__->print(baudrate);
-      __LOG_STREAM__->println("...");
-
-      changeBaudrate();
-
-      delay(100); // Little delay before the flush.
-      __GPS_STREAM__->flush();
-      __GPS_STREAM__->begin(baudrate);
-  }
+  sendCommand(COMMAND_MESSAGE_PRECONFIGURATION_BBR,sizeof(COMMAND_MESSAGE_PRECONFIGURATION_BBR)/sizeof(*COMMAND_MESSAGE_PRECONFIGURATION_BBR));
   
-  if (rate == 100){
-    // Change receiving frequency to 100 ms.
-    __LOG_STREAM__->println("Changing receiving frequency to 100 ms...");
-    changeFrequency();
-  }
+  sendCommand(COMMAND_set_BAUDE_RATE_115200_RAM,sizeof(COMMAND_set_BAUDE_RATE_115200_RAM)/sizeof(*COMMAND_set_BAUDE_RATE_115200_RAM));
+  delay(500);
+  
+  __GPS_SERIAL__.begin(115200);                                                    // Start with new baud rate
 
-  // Disable unnecessary channels like SBAS or QZSS.
-  // logSerial.println("Disabling unnecessary channels...");
-  // disableUnnecessaryChannels();
+  sendCommand(COMMAND_set_BAUDE_RATE_115200_BBR,sizeof(COMMAND_set_BAUDE_RATE_115200_BBR)/sizeof(*COMMAND_set_BAUDE_RATE_115200_BBR));
+  
+  delay(500);
 
-  // Enable NAV-PVT messages.
-  // logSerial.println("Enabling NAV-PVT messages...");
-  // enableNavPvt();
+  __GPS_SERIAL__.flush();                                                          // wait for last transmitted data to be sent 
+  __GPS_SERIAL__.begin(115200);                                                    // Start with new baud rate
 
-  __LOG_STREAM__->println("Auto-configuration is complete!");
-
-  delay(100); // Little delay before the flush.
-  __GPS_STREAM__->flush();
-
+  sendCommand(COMMAND_SET_UPDATE_RATE_10Hz_RAM,sizeof(COMMAND_SET_UPDATE_RATE_10Hz_RAM)/sizeof(*COMMAND_SET_UPDATE_RATE_10Hz_RAM));
+  
+  sendCommand(COMMAND_SET_UPDATE_RATE_10Hz_BBR,sizeof(COMMAND_SET_UPDATE_RATE_10Hz_BBR)/sizeof(*COMMAND_SET_UPDATE_RATE_10Hz_BBR));
+  
+  return sendCommand(COMMAND_POLL_RESPONSE, sizeof(COMMAND_POLL_RESPONSE)/(sizeof(*COMMAND_POLL_RESPONSE)));
+  
 }

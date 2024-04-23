@@ -9,12 +9,9 @@
 #include <math.h>
 #include <string.h>
 
-#define SERIAL_LOGGIN false
+#define SERIAL_LOGGIN true
 #define SD_LOGGIN false
 
-static uint8_t SupplyVoltage = 5;
-#define	SupplyVoltageSense_Ratio 5.99
-#define	SupplyVoltageSense_Pin 0
 
 #define Sampling_Rate_100
 // #define Sampling_Rate_80
@@ -22,22 +19,17 @@ static uint8_t SupplyVoltage = 5;
 // #define Sampling_Rate_50
 // #define Sampling_Rate_10
 
+#define __GPS_SERIAL__ Serial
+#define __LOG_STREAM__ Serial
 
-#define	ADC_bit_range 1023												                            // 10 bit ADC;
-#define	ReadVoltage(Pin) (SupplyVoltage*analogRead(Pin)/ADC_bit_range)	      //	Reads Voltage
-inline void __attribute__ ((always_inline)) CalibrateSupplyVoltage(){
-  analogReference(INTERNAL1V1);				// Choose 1.1V internal reference
-  SupplyVoltage	= SupplyVoltageSense_Ratio*ReadVoltage(SupplyVoltageSense_Pin);
-  analogReference(DEFAULT);					// Choose the default reference
-}
-
-#define	SteeringWheel_RotationalRange 270
-#define potPin A1
 
 /*  Button Declerations */
-#define startButtonPin 2
-#define stopButtonPin 3
-#define resetButtonPin 21
+#define PIN_START_BUTTON 2
+#define PIN_STOP_BUTTON 3
+#define PIN_RESET_BUTTON 21
+#define PIN_STEERING_WHEEL A1
+#define PIN_BRAKE_PRESSURE A2
+#define	PIN_SUPPLY_SENSE A0
 #define LED LED_BUILTIN
 
 volatile bool recording = false;
@@ -57,6 +49,9 @@ static volatile bool ERROR = false;
  */
 static volatile uint8_t ErrorFlag = false;
 static volatile bool WINDOW = false;
+
+MPU6050 mpu;
+File dataFile;    
 
 /**
  * @brief Structure to store the data
@@ -84,9 +79,10 @@ typedef	struct information{
   uint16_t gyroX;
   uint16_t gyroY;
   uint16_t gyroZ;
-  float	brakePressure;
-  float	tps;
-  uint8_t potValue;
+  uint16_t supplyVoltage;
+  uint16_t brakePressure;
+  uint16_t tps;
+  uint16_t potValue;
   float	SpeedGPS;
   char Latitude[20];        // ddmm.mmmm
   uint8_t NSIndicator;      // N=north or S=south
@@ -107,6 +103,13 @@ typedef	struct information{
  */
 log_t __LOG;
 
+
+inline void __attribute__ ((always_inline)) CalibrateSupplyVoltage(){
+  analogReference(INTERNAL1V1);				// Choose 1.1V internal reference
+  __LOG.supplyVoltage = analogRead(PIN_SUPPLY_SENSE);
+  analogReference(DEFAULT);					// Choose the default reference
+}
+
 /**
  * @brief Prints the log values to the Serial Monitor according to the format.
  */
@@ -114,23 +117,25 @@ inline void __attribute__ ((always_inline))  SerialPrintLog(){
     const PROGMEM uint8_t BufferSize = 256;
     char buffer[BufferSize];
 
-    Serial.print(__LOG.accelerationX);
+    Serial.print(__LOG.accelerationX,HEX);
     Serial.print(",");
-    Serial.print(__LOG.accelerationY);
+    Serial.print(__LOG.accelerationY,HEX);
     Serial.print(",");
-    Serial.print(__LOG.accelerationZ);
+    Serial.print(__LOG.accelerationZ,HEX);
     Serial.print(",");
-    Serial.print(__LOG.gyroX);
+    Serial.print(__LOG.gyroX,HEX);
     Serial.print(",");
-    Serial.print(__LOG.gyroY);
+    Serial.print(__LOG.gyroY,HEX);
     Serial.print(",");
-    Serial.print(__LOG.gyroZ);
+    Serial.print(__LOG.gyroZ,HEX);
     Serial.print(",");
-    Serial.print(__LOG.brakePressure);
+    Serial.print(__LOG.brakePressure,HEX);
     Serial.print(",");
-    Serial.print(__LOG.tps);
+    Serial.print(__LOG.tps,HEX);
     Serial.print(",");
-    Serial.print(__LOG.potValue);
+    Serial.print(__LOG.potValue,HEX);
+    Serial.print(",");
+    Serial.print(__LOG.supplyVoltage,HEX);
     Serial.print(",");
     Serial.print(__LOG.SpeedGPS);
     Serial.print(",");
@@ -149,14 +154,11 @@ inline void __attribute__ ((always_inline))  SerialPrintLog(){
     Serial.println(__LOG.elapsedTime);
 }
 
-MPU6050 mpu;
-File dataFile;                                                                // File to store the data
-
 void MPU6050_init(){
   uint8_t devStatus;                                                          // return status after each device operation (0 = PASS, !0 = error)
   uint16_t packetSize;                                                        // expected DMP packet size (default is 42 bytes)
 
-  Serial.print(F(" |--Initializing I2C devices"));
+  Serial.print(F(" |--Initializing I2C driver"));
   mpu.initialize();
   Serial.println(F("\t\tPASS"));
 
@@ -171,10 +173,10 @@ void MPU6050_init(){
     Serial.println(F("MPU6050 connection failed"));
   
   if (devStatus == 0) {                                                       // make sure it worked (returns 0 if so)
-   Serial.println(F("\t\t\tPASS")); 
+    Serial.println(F(" |--Calibrating:"));                                    // Caibrate
     mpu.CalibrateAccel(15);                                                   // Calibration Time: generate offsets and calibrate our MPU6050
     mpu.CalibrateGyro(15);                                                    // 
-    
+
     // Serial.print(F("\n |--Enabling DMP:"));
     // mpu.setDMPEnabled(true);
     // Serial.println(F("\t\t\tPASS")); 
@@ -235,64 +237,7 @@ void initTimers(){
 
   sei();                                                                        // Enable all interrupts                                                                 
 } 
-void initGPS(){
-  const PROGMEM char COMMAND_SET_UPDATE_RATE_10Hz_RAM = "B5 62 06 8A 0A 00 01 01 00 00 01 00 21 30 64 00 52 C3";
-  const PROGMEM char COMMAND_SET_UPDATE_RATE_10Hz_BBR = "B5 62 06 8A 0A 00 01 02 00 00 01 00 21 30 64 00 53 CC";
-  const PROGMEM char COMMAND_SET_VTG_MESSAGE_ONLY_RAM = "B5 62 06 8A 09 00 01 01 00 00 01 00 74 10 00 20 BB";
-  const PROGMEM char COMMAND_SET_VTG_MESSAGE_ONLY_BBR = "B5 62 06 8A 09 00 01 02 00 00 01 00 74 10 00 21 C3";
-  const PROGMEM char COMMAND_set_BAUDE_RATE_115200_RAM = "B5 62 06 8A 0C 00 01 01 00 00 01 00 52 40 00 C2 01 00 F4 B1";
-  const PROGMEM char COMMAND_set_BAUDE_RATE_115200_BBR = "B5 62 06 8A 0C 00 01 02 00 00 01 00 52 40 00 C2 01 00 F5 BC";
 
-  HardwareSerial *log = &Serial;
-  HardwareSerial *gps = &Serial1;
-
-
-
-  // GPS_init(log, gps, 115200, 100);
-
-  Serial1.begin(115200);
-
-  // restoreDefaults();
-
-//     Serial1.write(COMMAND_DISABLE_ALL_MESSAGES);
-//     Serial.print(".");
-//     waitForAck();
-
-//     Serial1.write(COMMAND_ENABLE_VTG_MESSAGE);
-//     Serial.print(".");
-//     waitForAck();
-
-//     Serial1.write(COMMAND_BAUDE_RATE_115200);
-//     Serial.print(".");
-//     waitForAck();
-
-    
-//     Serial1.flush();                                                          // wait for last transmitted data to be sent 
-//     Serial1.begin(115200);                                                    // Start with new baud rate
-//     while(Serial1.available()) Serial.read();                                 // empty  out possible garbage from input buffer
-
-//     Serial1.write(COMMAND_UPDATE_RATE_10Hz);
-//     Serial.print(".");
-//     waitForAck();  
-}
-
-void waitForAck() {
-  const PROGMEM uint8_t UBX_ACK_ACK_HEADER[] = {0xB5, 0x62, 0x05, 0x01};
-  uint8_t buffer[10];
-  uint8_t index = 0;
-
-  while (Serial.available()) {                                                // Wait for data to be available on the serial port
-    uint8_t byte = Serial.read();                                             // Read a byte from the serial port
-    if (byte == UBX_ACK_ACK_HEADER[index]) {                                  // Check if the byte matches the expected header
-      buffer[index++] = byte;                                                 // Byte matches, so add it to the buffer and increment the index
-      if (index == sizeof(UBX_ACK_ACK_HEADER))                                // Check if we've received the complete header
-        break;                                                                // We've received the complete header, so we can stop waiting
-    } else {                                                                  // Byte doesn't match, so reset the index and buffer
-      index = 0;
-      memset(buffer, 0, sizeof(buffer));
-    }
-  }
-}
 
 /**
  * @brief Reads the GPS data from the Serial1 port and parses the data to get the speed.
@@ -320,9 +265,9 @@ inline void __attribute__ ((always_inline))  readGPS(){
       __LOG.SpeedGPS = packet.message.VTG.SpeedOverGround;                      // Get the speed from the GPS data
       __LOG.GPS_Valid = true;                                                   // Mark the GPS data as valid
 
-      Serial.print("SpeedOverGround : ");
-      Serial.println(__LOG.SpeedGPS);
-    }else if (something.startsWith("GGA")){
+    //   Serial.print("SpeedOverGround : ");
+    //   Serial.println(__LOG.SpeedGPS);
+    // }else if (something.startsWith("GGA")){
       
       something.toCharArray(buf,bufsize);				                                // Convert the GPS data to char array
       packet= read(buf);     
@@ -333,10 +278,10 @@ inline void __attribute__ ((always_inline))  readGPS(){
       __LOG.EWIndicator = packet.message.GGA.EWIndicator;
       __LOG.FixQuality = packet.message.GGA.FixQuality;
 
-      Serial.print("Latitude : ");
-      Serial.println(packet.message.GGA.Latitude);
-      Serial.print("Longitude : ");
-      Serial.println(packet.message.GGA.Longitude);
+      // Serial.print("Latitude : ");
+      // Serial.println(packet.message.GGA.Latitude);
+      // Serial.print("Longitude : ");
+      // Serial.println(packet.message.GGA.Longitude);
     } 
   }
 }
@@ -352,15 +297,18 @@ inline void __attribute__ ((always_inline))  readMPU6050(){
  */
 inline void __attribute__ ((always_inline))  readVariousSensors(){
   CalibrateSupplyVoltage();                                                   // Calibrate the supply voltage
-  __LOG.brakePressure = (ReadVoltage(A2)-0.5)*11.5;                           // Read the Brake Pressure
-  __LOG.tps = ReadVoltage(A1)/SupplyVoltage;                                  // Read the Throttle Position Sensor
-  __LOG.potValue	= ((analogRead(potPin)/1023.0)-0.5)*SteeringWheel_RotationalRange/2;  // Read the Potentiometer value
+  // __LOG.brakePressure = (ReadVoltage(A2)-0.5)*11.5;                           // Read the Brake Pressure
+  // __LOG.tps = ReadVoltage(A1)/SupplyVoltage;                                  // Read the Throttle Position Sensor
+  // __LOG.potValue	= ((analogRead(potPin)/1023.0)-0.5)*SteeringWheel_RotationalRange/2;  // Read the Potentiometer value
+
+  __LOG.brakePressure = analogRead(PIN_BRAKE_PRESSURE);
 }
 /**
  * @brief Writes the log values to the SD card in the format of a CSV file.
  */
 inline void __attribute__ ((always_inline))  WriteToSD(){
-Serial.print(__LOG.accelerationX);
+  
+  dataFile.print(__LOG.accelerationX);
   dataFile.print(",");
   dataFile.print(__LOG.accelerationY);
   dataFile.print(",");
@@ -413,38 +361,9 @@ ISR(TIMER1_COMPA_vect){
   if (WINDOW){
     ERROR = true;
     ErrorFlag |= 0x01;
-    // Serial.println(ErrorFlag);
+    // Serial.println("\n\t!!\tOVERFLOW\t!!\n");
   }
   WINDOW = !WINDOW;
-}
-
-/**
- * @brief Run the data acquisition routine. 
- * @note The data acquisition process includes reading the GPS data, reading the MPU6050 data, reading the various sensors and storing the data in the __LOG structure.
- * @see readGPS()
- * @see readMPU6050()
- * @see readVariousSensors()
- * @see __LOG
- * 
- * @note The data is stored in the __LOG structure and can be printed using SerialPrintLog() function. 
- */
-inline void __attribute__ ((always_inline))  AquireData(){
-  
-  unsigned long t1 ,t2,t3,t4;
-  t1 = micros();
-
-  readGPS();			                                                          // Wait	for	VTG	messsage and print speed in	serial.	 
-  t2 = micros();
-  readMPU6050();									                                          // Read data from	MPU6050
-  t3 = micros();
-  readVariousSensors();
-  t4 = micros();
-
-  // Serial.print(t2-t1);
-  // Serial.print(",");
-  // Serial.print(t3-t2);
-  // Serial.print(",");
-  // Serial.println(t4-t3);
 }
 
 void setup() {
@@ -453,9 +372,9 @@ void setup() {
 
   /* Pin declerations */
   Serial.print(F("Initializing pins "));
-  pinMode(startButtonPin, INPUT_PULLUP);
-  pinMode(stopButtonPin, INPUT_PULLUP);
-  pinMode(resetButtonPin, INPUT_PULLUP);
+  pinMode(PIN_START_BUTTON, INPUT_PULLUP);
+  pinMode(PIN_STOP_BUTTON, INPUT_PULLUP);
+  pinMode(PIN_RESET_BUTTON, INPUT_PULLUP);
   pinMode(LED, OUTPUT);
   digitalWrite(LED,HIGH);
   delay(500);
@@ -485,30 +404,18 @@ void setup() {
 
   dataFile = SD.open("data.txt", FILE_WRITE);                                 // Open the data file
   dataFile ? Serial.println(F("\t\t\tPASS")) : Serial.println(F("\t\t\tFAIL"));
-  
-
-  // Serial.print(F("Opening Serial1 port at 9600 baud :"));
-  // Serial1.begin(9600);                                                      // Serial1 port connected	to GPS
-  // if(Serial1){
-  //   Serial.println(F("\tPASS "));
-  // } else {
-  //   ERROR = true;
-  //   ErrorFlag = 0x06;
-    
-  //   Serial.println(F("FAIL"));
-  // }
 
   Serial.print(F("Initializing GPS :"));
   initGPS();
-  Serial.println(F("\t\tPASS "));
+  Serial.println("\t\t\tPASS");
 
   Serial.print(F("Initializing FreqMeasure :"));
   FreqMeasure.begin();                                                        // Initialize the FreqMeasure library
-  Serial.println(F("\t\tPASS "));
+  Serial.println(F("\t\tPASS"));
 
   Serial.print(F("Setting up the interrupts :"));
-  attachInterrupt(digitalPinToInterrupt(startButtonPin), ISR_startRecording, FALLING);
-  attachInterrupt(digitalPinToInterrupt(stopButtonPin), ISR_stopRecording, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PIN_START_BUTTON), ISR_startRecording, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PIN_STOP_BUTTON), ISR_stopRecording, FALLING);
   Serial.println(F("\t\tPASS "));
 
   Serial.print(F("Initializing Timers :"));
@@ -522,6 +429,9 @@ void loop()	{
   // if (!SD_present) return;
 
   if	(recording)	{
+
+    readGPS();			                                                          // Wait	for	VTG	messsage and print speed in	serial.	 
+
     if (!WINDOW) return;
 
     double sum = 0;
@@ -537,7 +447,9 @@ void loop()	{
     //   }
     // }
   
-    AquireData();                                                               // Aquire the data
+    readMPU6050();									                                          // Read data from	MPU6050
+    readVariousSensors();
+    
     if(SERIAL_LOGGIN) SerialPrintLog();                                         // Print the data
     if(SD_LOGGIN) WriteToSD();                                                  // Write the data to the SD card
 
