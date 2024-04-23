@@ -1,5 +1,6 @@
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps612.h"
+#include "UBLOXgps.h"
 #include <FreqMeasure.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -87,6 +88,16 @@ typedef	struct information{
   float	tps;
   uint8_t potValue;
   float	SpeedGPS;
+  char Latitude[20];        // ddmm.mmmm
+  uint8_t NSIndicator;      // N=north or S=south
+  char Longitude[20];       // ddmm.mmmm
+  uint8_t EWIndicator;      // E=east or W=west
+  uint8_t FixQuality;       /*  0   : Fix not available or invalid
+                                1   : GPS SPS Mode, fix valid
+                                2   : Differential GPS, SPS mode, fix valid
+                                3-5 : Not supported
+                                6   : Dead Reckoning Mode, fix valid
+                            */
   bool GPS_Valid;
   unsigned long	elapsedTime;
 } log_t;
@@ -122,6 +133,16 @@ inline void __attribute__ ((always_inline))  SerialPrintLog(){
     Serial.print(__LOG.potValue);
     Serial.print(",");
     Serial.print(__LOG.SpeedGPS);
+    Serial.print(",");
+    Serial.print(__LOG.Latitude);
+    Serial.print(",");
+    Serial.print(__LOG.NSIndicator);
+    Serial.print(",");
+    Serial.print(__LOG.Longitude);
+    Serial.print(",");
+    Serial.print(__LOG.EWIndicator);
+    Serial.print(",");
+    Serial.print(__LOG.FixQuality);
     Serial.print(",");
     Serial.print(__LOG.GPS_Valid);
     Serial.print(",");
@@ -222,6 +243,17 @@ void initGPS(){
   const PROGMEM char COMMAND_set_BAUDE_RATE_115200_RAM = "B5 62 06 8A 0C 00 01 01 00 00 01 00 52 40 00 C2 01 00 F4 B1";
   const PROGMEM char COMMAND_set_BAUDE_RATE_115200_BBR = "B5 62 06 8A 0C 00 01 02 00 00 01 00 52 40 00 C2 01 00 F5 BC";
 
+  HardwareSerial *log = &Serial;
+  HardwareSerial *gps = &Serial1;
+
+
+
+  // GPS_init(log, gps, 115200, 100);
+
+  Serial1.begin(115200);
+
+  // restoreDefaults();
+
 //     Serial1.write(COMMAND_DISABLE_ALL_MESSAGES);
 //     Serial.print(".");
 //     waitForAck();
@@ -274,13 +306,38 @@ inline void __attribute__ ((always_inline))  readGPS(){
   if(Serial1.available()){
     int bufsize = 256;
     char buf[bufsize];
-    String	something =	Serial1.readStringUntil('\n');	                      //	Read the GPS data
-    if (!something.substring(3).startsWith("VTG")) return;                    // If the data is not VTG, return
-    
-    something.toCharArray(buf,bufsize);				                                // Convert the GPS data to char array
-    packet_t packet = read(buf);                                              // Parse the GPS data
-    __LOG.SpeedGPS = packet.message.VTG.SpeedOverGround;                      // Get the speed from the GPS data
-    __LOG.GPS_Valid = true;                                                   // Mark the GPS data as valid
+    packet_t packet;
+    String	something =	Serial1.readStringUntil('\n').substring(3);	                      //	Read the GPS data
+    // something.toCharArray(buf,bufsize);				                                // Convert the GPS data to char array
+    // packet= read(buf);  
+    // SerialPrintMessage(packet);
+
+    if (something.startsWith("VTG")){
+      
+      something.toCharArray(buf,bufsize);				                                // Convert the GPS data to char array
+      packet= read(buf);                                                      // Parse the GPS data
+      
+      __LOG.SpeedGPS = packet.message.VTG.SpeedOverGround;                      // Get the speed from the GPS data
+      __LOG.GPS_Valid = true;                                                   // Mark the GPS data as valid
+
+      Serial.print("SpeedOverGround : ");
+      Serial.println(__LOG.SpeedGPS);
+    }else if (something.startsWith("GGA")){
+      
+      something.toCharArray(buf,bufsize);				                                // Convert the GPS data to char array
+      packet= read(buf);     
+
+      strcpy(__LOG.Latitude, packet.message.GGA.Latitude);
+      strcpy(__LOG.Longitude, packet.message.GGA.Longitude);
+      __LOG.NSIndicator = packet.message.GGA.NSIndicator;
+      __LOG.EWIndicator = packet.message.GGA.EWIndicator;
+      __LOG.FixQuality = packet.message.GGA.FixQuality;
+
+      Serial.print("Latitude : ");
+      Serial.println(packet.message.GGA.Latitude);
+      Serial.print("Longitude : ");
+      Serial.println(packet.message.GGA.Longitude);
+    } 
   }
 }
 /**
@@ -303,12 +360,39 @@ inline void __attribute__ ((always_inline))  readVariousSensors(){
  * @brief Writes the log values to the SD card in the format of a CSV file.
  */
 inline void __attribute__ ((always_inline))  WriteToSD(){
-  const PROGMEM uint8_t BufferSize = 256;
-  char buffer[BufferSize];
-    
-  snprintf(buffer, 256, BufferSize, "%f,%f,%f,%f,%f,%f,%f,%f,%d,%f,%d,%lf\n",__LOG.accelerationX,__LOG.accelerationY,__LOG.accelerationZ,__LOG.gyroX,__LOG.gyroY,__LOG.gyroZ,__LOG.brakePressure,__LOG.tps,__LOG.potValue, __LOG.SpeedGPS, __LOG.GPS_Valid, __LOG.elapsedTime );
-  
-  dataFile.print(buffer);
+Serial.print(__LOG.accelerationX);
+  dataFile.print(",");
+  dataFile.print(__LOG.accelerationY);
+  dataFile.print(",");
+  dataFile.print(__LOG.accelerationZ);
+  dataFile.print(",");
+  dataFile.print(__LOG.gyroX);
+  dataFile.print(",");
+  dataFile.print(__LOG.gyroY);
+  dataFile.print(",");
+  dataFile.print(__LOG.gyroZ);
+  dataFile.print(",");
+  dataFile.print(__LOG.brakePressure);
+  dataFile.print(",");
+  dataFile.print(__LOG.tps);
+  dataFile.print(",");
+  dataFile.print(__LOG.potValue);
+  dataFile.print(",");
+  dataFile.print(__LOG.SpeedGPS);
+  dataFile.print(",");
+  dataFile.print(__LOG.Latitude);
+  dataFile.print(",");
+  dataFile.print(__LOG.NSIndicator);
+  dataFile.print(",");
+  dataFile.print(__LOG.Longitude);
+  dataFile.print(",");
+  dataFile.print(__LOG.EWIndicator);
+  dataFile.print(",");
+  dataFile.print(__LOG.FixQuality);
+  dataFile.print(",");
+  dataFile.print(__LOG.GPS_Valid);
+  dataFile.print(",");
+  dataFile.println(__LOG.elapsedTime);
   dataFile.flush();
 }
 
@@ -322,6 +406,8 @@ void ISR_stopRecording(){
   recording = false;
   digitalWrite(LED, LOW);
   TIMSK1 &= B11011000;                                                        // Disable Timer1
+
+  if(SD_present) dataFile.close();
 }
 ISR(TIMER1_COMPA_vect){
   if (WINDOW){
@@ -354,12 +440,11 @@ inline void __attribute__ ((always_inline))  AquireData(){
   readVariousSensors();
   t4 = micros();
 
-  Serial.print(t2-t1);
-  Serial.print(",");
-  Serial.print(t3-t2);
-  Serial.print(",");
-  Serial.print(t4-t3);
-  Serial.println("\n");
+  // Serial.print(t2-t1);
+  // Serial.print(",");
+  // Serial.print(t3-t2);
+  // Serial.print(",");
+  // Serial.println(t4-t3);
 }
 
 void setup() {
@@ -384,14 +469,14 @@ void setup() {
   #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
     Fastwire::setup(400, true);
   #endif
-  Serial.println(F("\t\tPASS"));
 
+  Serial.println(F("\t\tPASS"));
   
   Serial.println(F("Initializing IMU :"));
   MPU6050_init();                                                             // Initialize the MPU6050
   
   Serial.print(F("\nInitializing SD card :"));
-  if (!SD.begin(10) && SD_LOGGIN) {                                           // SD card initialization
+  if (!SD.begin(53) && SD_LOGGIN) {                                           // SD card initialization
     ERROR = true;
     ErrorFlag = 0x05;
     Serial.println(F("SD initialization failed!\n\tFix and reboot to contrinue\n"));
@@ -399,19 +484,19 @@ void setup() {
   }
 
   dataFile = SD.open("data.txt", FILE_WRITE);                                 // Open the data file
-  dataFile ? Serial.print(F("\t\t\tPASS")) : Serial.println(F("\t\t\tFAIL"));
+  dataFile ? Serial.println(F("\t\t\tPASS")) : Serial.println(F("\t\t\tFAIL"));
   
 
-  Serial.print(F("Opening Serial1 port at 9600 baud :"));
-  Serial1.begin(9600);                                                      // Serial1 port connected	to GPS
-  if(Serial1){
-    Serial.println(F("\tPASS "));
-  } else {
-    ERROR = true;
-    ErrorFlag = 0x06;
+  // Serial.print(F("Opening Serial1 port at 9600 baud :"));
+  // Serial1.begin(9600);                                                      // Serial1 port connected	to GPS
+  // if(Serial1){
+  //   Serial.println(F("\tPASS "));
+  // } else {
+  //   ERROR = true;
+  //   ErrorFlag = 0x06;
     
-    Serial.println(F("FAIL"));
-  }
+  //   Serial.println(F("FAIL"));
+  // }
 
   Serial.print(F("Initializing GPS :"));
   initGPS();
@@ -433,8 +518,8 @@ void setup() {
 }
 
 void loop()	{
-  if (!IMU_present) return;
-  if (!SD_present) return;
+  // if (!IMU_present) return;
+  // if (!SD_present) return;
 
   if	(recording)	{
     if (!WINDOW) return;

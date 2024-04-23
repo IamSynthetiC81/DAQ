@@ -7,6 +7,8 @@
 unsigned long baudrate;
 unsigned short rate;
 
+HardwareSerial *__LOG_STREAM__ = NULL, *__GPS_STREAM__ = NULL;
+
 /* An array of possible baudrates that can be used by the GPS receiver, sorted descending to prevent excess Serial
  * flush/begin after restoring defaults. Uncomment values that can be used by the GPS receiver before the
  * auto-configuration.
@@ -23,82 +25,63 @@ const long gpsPossibleBaudrates[] = {
     // 4800,
 };
 
+// Print a packet to the log serial port in a hexadecimal form.
+uint8_t printPacket(byte *packet, byte len){
+  if (__LOG_STREAM__) return 0xff;
 
-bool GPS_init(Stream logStream, Stream gpsStream, uint16_t targetBaudrate,  uint16_t targetRate){
-  
-  baudrate = targetBaudrate;
-  rate = targetRate; 
-  
-  // Restore the default GPS receiver configuration.
-  for (byte i = 0; i < sizeof(gpsPossibleBaudrates) / sizeof(*gpsPossibleBaudrates); i++){
-    
-    logSerial.print("Trying to restore defaults at ");
-    logSerial.print(gpsPossibleBaudrates[i]);
-    logSerial.println(" baudrate...");
+  char temp[3];
 
-    if (i != 0){
-        delay(100); // Little delay before the flush.
-        gpsStream.flush();
-    }
+  for (byte i = 0; i < len; i++){
+    sprintf(temp, "%.2X", packet[i]);
+    __LOG_STREAM__->print(temp);
 
-    gpsStream.begin(gpsPossibleBaudrates[i]);
-    restoreDefaults();
+    if (i != len - 1)
+        __LOG_STREAM__->print(' ');
   }
 
-  // Switch the GPS receiver serial configuration to the default baudrate.
-  if (gpsPossibleBaudrates[sizeof(gpsPossibleBaudrates) / sizeof(*gpsPossibleBaudrates) - 1] != GPS_DEFAULT_BAUDRATE){
-    
-    logSerial.print("Switching to the default baudrate which is ");
-    logSerial.print(GPS_DEFAULT_BAUDRATE);
-    logSerial.println("...");
+  __LOG_STREAM__->println();
 
-    delay(100); // Little delay before the flush.
-    gpsSerial.flush();
-    gpsSerial.begin(GPS_DEFAULT_BAUDRATE);
-  }
-
-  // Switch the GPS receiver serial configuration to the target baudrate.
-  if (baudrate != GPS_DEFAULT_BAUDRATE){
-      logSerial.print("Switching to the target baudrate which is ");
-      logSerial.print(baudrate);
-      logSerial.println("...");
-
-      changeBaudrate();
-
-      delay(100); // Little delay before the flush.
-      gpsSerial.flush();
-      gpsSerial.begin(baudrate);
-  }
-  
-  if (rate == 100){
-    // Change receiving frequency to 100 ms.
-    logSerial.println("Changing receiving frequency to 100 ms...");
-    changeFrequency();
-  }
-
-  // Disable unnecessary channels like SBAS or QZSS.
-  // logSerial.println("Disabling unnecessary channels...");
-  // disableUnnecessaryChannels();
-
-  // Enable NAV-PVT messages.
-  // logSerial.println("Enabling NAV-PVT messages...");
-  // enableNavPvt();
-
-  logSerial.println("Auto-configuration is complete!");
-
-  delay(100); // Little delay before the flush.
-  gpsSerial.flush();
-
+  return 0x01;
 }
 
-
 void sendPacket(byte *packet, byte len){
-    for (byte i = 0; i < len; i++)
-    {
-        gpsSerial.write(packet[i]);
+  if (__LOG_STREAM__) return 0xff;
+  if (__GPS_STREAM__) return 0xff;
+
+    for (byte i = 0; i < len; i++){
+        __GPS_STREAM__->write(packet[i]);
     }
 
     printPacket(packet, len);
+}
+
+void restoreDefaults(){
+  // CFG-CFG packet.
+  byte packet[] = {
+      0xB5, // sync char 1
+      0x62, // sync char 2
+      0x06, // class
+      0x09, // id
+      0x0D, // length
+      0x00, // length
+      0xFF, // payload
+      0xFF, // payload
+      0x00, // payload
+      0x00, // payload
+      0x00, // payload
+      0x00, // payload
+      0x00, // payload
+      0x00, // payload
+      0xFF, // payload
+      0xFF, // payload
+      0x00, // payload
+      0x00, // payload
+      0x17, // payload
+      0x2F, // CK_A
+      0xAE, // CK_B
+  };
+
+  sendPacket(packet, sizeof(packet));
 }
 
 void changeBaudrate(){
@@ -157,4 +140,74 @@ void changeFrequency(){
     0x12, // CK_B
   };
   sendPacket(packet, sizeof(packet));
+}
+
+bool GPS_init(HardwareSerial *logStream, HardwareSerial *gpsStream, long targetBaudrate,  long targetRate){
+  
+  baudrate = targetBaudrate;
+  rate = targetRate; 
+
+  __LOG_STREAM__ = logStream;
+  __GPS_STREAM__ = gpsStream;
+  
+  // Restore the default GPS receiver configuration.
+  for (byte i = 0; i < sizeof(gpsPossibleBaudrates) / sizeof(*gpsPossibleBaudrates); i++){
+    
+    __LOG_STREAM__->print("Trying to restore defaults at ");
+    __LOG_STREAM__->print(gpsPossibleBaudrates[i]);
+    __LOG_STREAM__->println(" baudrate...");
+
+    if (i != 0){
+        delay(100); // Little delay before the flush.
+        __GPS_STREAM__->flush();
+    }
+
+    __GPS_STREAM__->begin(gpsPossibleBaudrates[i]);
+    restoreDefaults();
+  }
+
+  // Switch the GPS receiver serial configuration to the default baudrate.
+  if (gpsPossibleBaudrates[sizeof(gpsPossibleBaudrates) / sizeof(*gpsPossibleBaudrates) - 1] != GPS_DEFAULT_BAUDRATE){
+    
+    __LOG_STREAM__->print("Switching to the default baudrate which is ");
+    __LOG_STREAM__->print(GPS_DEFAULT_BAUDRATE);
+    __LOG_STREAM__->println("...");
+
+    delay(100); // Little delay before the flush.
+    __GPS_STREAM__->flush();
+    __GPS_STREAM__->begin(GPS_DEFAULT_BAUDRATE);
+  }
+
+  // Switch the GPS receiver serial configuration to the target baudrate.
+  if (baudrate != GPS_DEFAULT_BAUDRATE){
+      __LOG_STREAM__->print("Switching to the target baudrate which is ");
+      __LOG_STREAM__->print(baudrate);
+      __LOG_STREAM__->println("...");
+
+      changeBaudrate();
+
+      delay(100); // Little delay before the flush.
+      __GPS_STREAM__->flush();
+      __GPS_STREAM__->begin(baudrate);
+  }
+  
+  if (rate == 100){
+    // Change receiving frequency to 100 ms.
+    __LOG_STREAM__->println("Changing receiving frequency to 100 ms...");
+    changeFrequency();
+  }
+
+  // Disable unnecessary channels like SBAS or QZSS.
+  // logSerial.println("Disabling unnecessary channels...");
+  // disableUnnecessaryChannels();
+
+  // Enable NAV-PVT messages.
+  // logSerial.println("Enabling NAV-PVT messages...");
+  // enableNavPvt();
+
+  __LOG_STREAM__->println("Auto-configuration is complete!");
+
+  delay(100); // Little delay before the flush.
+  __GPS_STREAM__->flush();
+
 }
