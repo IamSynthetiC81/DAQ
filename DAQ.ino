@@ -9,6 +9,8 @@
 #include <math.h>
 #include <string.h>
 
+#include "ErrorHandler.h"
+
 #define SERIAL_LOGGIN true
 #define SD_LOGGIN false
 
@@ -20,10 +22,6 @@
 */
 #define __SAMPLING_RATE__ 200
 
-#define __GPS_SERIAL__ Serial1
-#define __LOG_STREAM__ Serial
-
-
 /*  Button Declerations */
 #define PIN_START_BUTTON 2
 #define PIN_STOP_BUTTON 3
@@ -33,6 +31,10 @@
 #define PIN_BRAKE_PRESSURE A2
 #define PIN_TROTTLE_POSITION_SENSOR A3
 #define LED LED_BUILTIN
+
+/* COMUNICATION DECLERATION */
+#define __GPS_SERIAL__ Serial1
+#define __LOG_STREAM__ Serial
 
 volatile bool recording = false;
 volatile long StartTime = 0;
@@ -164,9 +166,9 @@ void MPU6050_init(){
   #endif
 
   Wire.beginTransmission(0x68);                                               // Start I2C communication with the MPU6050
-  byte error = Wire.endTransmission();                                        // Check if the MPU6050 is connected
+  VEC[ERREG_GN1] |= (Wire.endTransmission() << PROTOCOL_I2C_STUCK_BUS) ;       // Check if the MPU6050 is connected
 
-  if (error != 0){
+  if (VEC[ERREG_GN1] & (1 << PROTOCOL_I2C_STUCK_BUS) != 0){
     Wire.end();
     pinMode(21, OUTPUT); // pin 21 is SCL
     digitalWrite(21, HIGH);
@@ -378,15 +380,13 @@ void ISR_stopRecording(){
 }
 ISR(TIMER1_COMPA_vect){
   if (WINDOW){
-    ERROR = true;
-    ErrorFlag |= 0x01;
-    // Serial.println("\n\t!!\tOVERFLOW\t!!\n");
+    VEC[ARD_ERROR_CODES] |= (1 << SAMPLING_RATE_LOW);
   }
   WINDOW = !WINDOW;
 }
 
 void setup() {
-  ERROR = false;                                                            // Clear ERROR flag
+  clearError();
 
   __LOG_STREAM__.begin(115200);
   while (!Serial && SERIAL_LOGGIN);
