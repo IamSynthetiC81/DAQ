@@ -1,63 +1,90 @@
-#include <UbxGps.h>
-#include <UbxGpsNavPosecef.h>
-#include <UbxGpsNavPosllh.h>
-#include <UbxGpsNavPvt.h>
-#include <UbxGpsNavSol.h>
+// #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
+// #include <u-blox_config_keys.h>
+// #include <u-blox_structs.h>
+
+// #include "HardwareSerial.h"
 
 
-UbxGpsNavPvt<HardwareSerial> gps(Serial1);
+
+// void sendPacket(byte *packet, byte len){
+//   for (byte i = 0; i < len; i++){
+//     Serial1.write(pgm_read_byte(packet[i]));
+//     delay(5);
+//   }
+// }
+
+// void sendCommand(byte *command, byte len){
+//   sendPacket(command, len);
+// }
+
+// void printPVTdata(UBX_NAV_PVT_data_t *ubxDataStruct)
+// {
+    
+//     __LOG.Latitude = ubxDataStruct->lat;
+//     __LOG.Longitude = ubxDataStruct->lon
+//     __LOG.Altitude = ubxDataStruct->hMSL;
+//     __LOG.GroundSpeed = myGNSS.getGroundSpeed();
+//     __LOG.Heading = myGNSS.getHeading();
+    
+//     // Serial.println();
+
+//     // Serial.print(F("Time: ")); // Print the time
+//     // uint8_t hms = ubxDataStruct->hour; // Print the hours
+//     // if (hms < 10) Serial.print(F("0")); // Print a leading zero if required
+//     // Serial.print(hms);
+//     // Serial.print(F(":"));
+//     // hms = ubxDataStruct->min; // Print the minutes
+//     // if (hms < 10) Serial.print(F("0")); // Print a leading zero if required
+//     // Serial.print(hms);
+//     // Serial.print(F(":"));
+//     // hms = ubxDataStruct->sec; // Print the seconds
+//     // if (hms < 10) Serial.print(F("0")); // Print a leading zero if required
+//     // Serial.print(hms);
+//     // Serial.print(F("."));
+//     // unsigned long millisecs = ubxDataStruct->iTOW % 1000; // Print the milliseconds
+//     // if (millisecs < 100) Serial.print(F("0")); // Print the trailing zeros correctly
+//     // if (millisecs < 10) Serial.print(F("0"));
+//     // Serial.print(millisecs);
+
+//     // long latitude = ubxDataStruct->lat; // Print the latitude
+//     // Serial.print(F(" Lat: "));
+//     // Serial.print(latitude);
+
+//     // long longitude = ubxDataStruct->lon; // Print the longitude
+//     // Serial.print(F(" Long: "));
+//     // Serial.print(longitude);
+//     // Serial.print(F(" (degrees * 10^-7)"));
+
+//     // long altitude = ubxDataStruct->hMSL; // Print the height above mean sea level
+//     // Serial.print(F(" Height above MSL: "));
+//     // Serial.print(altitude);
+//     // Serial.println(F(" (mm)"));
+// }
+
+// bool initGPS(SFE_UBLOX_GNSS *myGNSS) {
+//   Serial1.begin(9600);
+
+//   Stream *gps; 
+//   gps = &Serial1;
+
+//   if (myGNSS->begin(*gps, 250, false) == false){
+//     Serial.println(F("GPS not detected\n"));
+//     return false;
+//   }
 
 
-const PROGMEM char CONFIG[] = {
-  // Disable NMEA
-  0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x24, // GxGGA off
-  0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x01,0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x2B, // GxGLL off
-  0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x02,0x00,0x00,0x00,0x00,0x00,0x01,0x02,0x32, // GxGSA off
-  0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x03,0x00,0x00,0x00,0x00,0x00,0x01,0x03,0x39, // GxGSV off
-  0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x04,0x00,0x00,0x00,0x00,0x00,0x01,0x04,0x40, // GxRMC off
-  0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x05,0x00,0x00,0x00,0x00,0x00,0x01,0x05,0x47, // GxVTG off
-  0xB5,0x62,0x06,0x8A,0x0E,0x00,0x01,0x01,0x00,0x00,0xBB,0x00,0x91,0x20,0x01,0xB1,0x00,0x91,0x20,0x01,0x70,0xB6,
-  // Disable UBX
-  0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x17,0xDC, //NAV-PVT off
-  0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x12,0xB9, //NAV-POSLLH off
-  0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x13,0xC0, //NAV-STATUS off
+//   // send configuration data in UBX protocol
+//   for(int i = 0; i < sizeof(CONFIG); i++) {                        
+//     Serial1.write( pgm_read_byte(CONFIG+i) );
+//     delay(5); // simulating a 38400baud pace (or less), otherwise commands are not accepted by the device.
+//   }
 
-  // Enable UBX
-  0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x18,0xE1, //NAV-PVT on
-  // 0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x02,0x00,0x01,0x00,0x00,0x00,0x00,0x13,0xBE, //NAV-POSLLH on
-  // 0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x03,0x00,0x01,0x00,0x00,0x00,0x00,0x14,0xC5, //NAV-STATUS on
+//   Serial1.setTimeout(100);
 
-  // Rate
-  // 0xB5,0x62,0x06,0x08,0x06,0x00,0x64,0x00,0x01,0x00,0x01,0x00,0x7A,0x12, //(10Hz)
-  // 0xB5,0x62,0x06,0x08,0x06,0x00,0xC8,0x00,0x01,0x00,0x01,0x00,0xDE,0x6A, //(5Hz)
-  0xB5,0x62,0x06,0x08,0x06,0x00,0xE8,0x03,0x01,0x00,0x01,0x00,0x01,0x39, //(1Hz)
+//   // Serial1.flush();
+//   // Serial1.begin(115200);
 
-  // 0xB5,0x62,0x06,0x8A,0x0C,0x00,0x01,0x01,0x00,0x00,0x01,0x00,0x52,0x40,0x00,0xC2,0x01,0x00,0xF4,0xB1,
-};
-
-void sendPacket(byte *packet, byte len){
-  for (byte i = 0; i < len; i++){
-    Serial1.write(pgm_read_byte(packet[i]));
-    delay(5);
-  }
-}
-
-void sendCommand(byte *command, byte len){
-  sendPacket(command, len);
-}
-
-void initGPS() {
-  Serial1.begin(9600);
-
-  // send configuration data in UBX protocol
-  for(int i = 0; i < sizeof(CONFIG); i++) {                        
-    Serial1.write( pgm_read_byte(CONFIG+i) );
-    delay(5); // simulating a 38400baud pace (or less), otherwise commands are not accepted by the device.
-  }
-
-  // Serial1.flush();
-  // Serial1.begin(115200);
-
-  gps.begin(115200);
-
-}
+//   myGNSS->setUART1Output(COM_TYPE_UBX);
+//   myGNSS->saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
+//   myGNSS->setAutoPVTcallbackPtr(&printPVTdata); // Enable automatic NAV PVT messages with callback to printPVTdata
+// }

@@ -1,17 +1,15 @@
+#include <SparkFun_u-blox_GNSS_Arduino_Library.h>
+#include <u-blox_config_keys.h>
+#include <u-blox_structs.h>
+
 #include "I2Cdev.h"
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
 
-#include <math.h>
-#include <string.h>
-
 #include "MPU6050_6Axis_MotionApps612.h"
 #include "ErrorHandler.h"
-
-#include "UBLOXgps.h"
 #include "NMEA_Parser.h"
-
 
 #define SERIAL_LOGGIN true
 #define SD_LOGGIN false
@@ -22,7 +20,7 @@
  * @note The sampling frequency is set to 200Hz
  * @see initTimers()
 */
-#define __SAMPLING_RATE__ 100
+#define __SAMPLING_RATE__ 500
 
 /*  Button Declerations 
  *  PIN 47 is used by Timer5 to measure pulses
@@ -45,6 +43,7 @@ static bool SD_present = false;
 
 static MPU6050 mpu;
 static File dataFile;    
+static SFE_UBLOX_GNSS myGNSS;
 
 /**
  * @brief Structure to store the data
@@ -77,18 +76,11 @@ typedef	struct information{
   uint16_t tps;
   uint16_t potValue;
   uint16_t CounterPulses;
-  float	SpeedGPS;
-  char Latitude[20];        // ddmm.mmmm
-  uint8_t NSIndicator;      // N=north or S=south
-  char Longitude[20];       // ddmm.mmmm
-  uint8_t EWIndicator;      // E=east or W=west
-  uint8_t FixQuality;       /*  0   : Fix not available or invalid
-                                1   : GPS SPS Mode, fix valid
-                                2   : Differential GPS, SPS mode, fix valid
-                                3-5 : Not supported
-                                6   : Dead Reckoning Mode, fix valid
-                            */
-  bool GPS_Valid;
+  uint32_t GroundSpeed;
+  uint32_t Heading;
+  uint32_t Latitude;
+  uint32_t Longitude;
+  uint32_t Altitude;
   unsigned long	elapsedTime;
 } log_t;
 
@@ -97,45 +89,106 @@ typedef	struct information{
  */
 log_t __LOG;
 
+
+void printPVTdata(UBX_NAV_PVT_data_t *ubxDataStruct){
+  __LOG.Latitude = ubxDataStruct->lat;
+  __LOG.Longitude = ubxDataStruct->lon;
+  __LOG.Altitude = ubxDataStruct->hMSL;
+  __LOG.GroundSpeed = myGNSS.getGroundSpeed();
+  __LOG.Heading = myGNSS.getHeading();
+}
+
+bool initGPS(SFE_UBLOX_GNSS *myGNSS) {
+  const PROGMEM char CONFIG[] = {
+    // Disable NMEA
+    0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x24, // GxGGA off
+    0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x01,0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x2B, // GxGLL off
+    // 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x02,0x00,0x00,0x00,0x00,0x00,0x01,0x02,0x32, // GxGSA off
+    0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x03,0x00,0x00,0x00,0x00,0x00,0x01,0x03,0x39, // GxGSV off
+    0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x04,0x00,0x00,0x00,0x00,0x00,0x01,0x04,0x40, // GxRMC off
+    // 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x05,0x00,0x00,0x00,0x00,0x00,0x01,0x05,0x47, // GxVTG off
+    0xB5,0x62,0x06,0x8A,0x0E,0x00,0x01,0x01,0x00,0x00,0xBB,0x00,0x91,0x20,0x01,0xB1,0x00,0x91,0x20,0x01,0x70,0xB6,
+    // Disable UBX
+    0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x17,0xDC, //NAV-PVT off
+    0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x12,0xB9, //NAV-POSLLH off
+    0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x13,0xC0, //NAV-STATUS off
+
+    // Enable UBX
+    // 0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x18,0xE1, //NAV-PVT on
+    // 0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x02,0x00,0x01,0x00,0x00,0x00,0x00,0x13,0xBE, //NAV-POSLLH on
+    // 0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x03,0x00,0x01,0x00,0x00,0x00,0x00,0x14,0xC5, //NAV-STATUS on
+
+    // Rate
+    // 0xB5,0x62,0x06,0x08,0x06,0x00,0x64,0x00,0x01,0x00,0x01,0x00,0x7A,0x12, //(10Hz)
+    // 0xB5,0x62,0x06,0x08,0x06,0x00,0xC8,0x00,0x01,0x00,0x01,0x00,0xDE,0x6A, //(5Hz)
+    0xB5,0x62,0x06,0x08,0x06,0x00,0xE8,0x03,0x01,0x00,0x01,0x00,0x01,0x39, //(1Hz)
+
+    // 0xB5,0x62,0x06,0x8A,0x0C,0x00,0x01,0x01,0x00,0x00,0x01,0x00,0x52,0x40,0x00,0xC2,0x01,0x00,0xF4,0xB1,
+  };
+
+  Serial1.begin(9600);
+
+  Stream *gps; 
+  gps = &Serial1;
+
+  if (myGNSS->begin(*gps, 250, false) == false){
+    Serial.println(F("GPS not detected\n"));
+    return false;
+  }
+
+
+  // send configuration data in UBX protocol
+  for(int i = 0; i < sizeof(CONFIG); i++) {                        
+    Serial1.write( pgm_read_byte(CONFIG+i) );
+    delay(5); // simulating a 38400baud pace (or less), otherwise commands are not accepted by the device.
+  }
+
+  Serial1.setTimeout(100);
+
+  // Serial1.flush();
+  // Serial1.begin(115200);
+
+  myGNSS->setUART1Output(COM_TYPE_UBX);
+  myGNSS->saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
+  myGNSS->setAutoPVTcallbackPtr(&printPVTdata); // Enable automatic NAV PVT messages with callback to printPVTdata
+}
+
+
 /**
  * @brief Prints the log values to the Serial Monitor according to the format.
  */
 inline void __attribute__ ((always_inline))  SerialPrintLog(){
-    Serial.print(__LOG.accelerationX,HEX);
-    Serial.print(",");
-    Serial.print(__LOG.accelerationY,HEX);
-    Serial.print(",");
-    Serial.print(__LOG.accelerationZ,HEX);
-    Serial.print(",");
-    Serial.print(__LOG.gyroX,HEX);
-    Serial.print(",");
-    Serial.print(__LOG.gyroY,HEX);
-    Serial.print(",");
-    Serial.print(__LOG.gyroZ,HEX);
-    Serial.print(",");
-    Serial.print(__LOG.brakePressure,HEX);
-    Serial.print(",");
-    Serial.print(__LOG.tps,HEX);
-    Serial.print(",");
-    Serial.print(__LOG.potValue,HEX);
-    Serial.print(",");
-    Serial.print(__LOG.supplyVoltage,HEX);
-    Serial.print(",");
-    Serial.print(__LOG.SpeedGPS);
-    Serial.print(",");
-    Serial.print(__LOG.Latitude);
-    Serial.print(",");
-    Serial.print(__LOG.NSIndicator);
-    Serial.print(",");
-    Serial.print(__LOG.Longitude);
-    Serial.print(",");
-    Serial.print(__LOG.EWIndicator);
-    Serial.print(",");
-    Serial.print(__LOG.FixQuality);
-    Serial.print(",");
-    Serial.print(__LOG.GPS_Valid);
-    Serial.print(",");
-    Serial.println(__LOG.elapsedTime);
+  Serial.print(__LOG.accelerationX);
+  Serial.print(",");
+  Serial.print(__LOG.accelerationY);
+  Serial.print(",");
+  Serial.print(__LOG.accelerationZ);
+  Serial.print(",");
+  Serial.print(__LOG.gyroX);
+  Serial.print(",");
+  Serial.print(__LOG.gyroY);
+  Serial.print(",");
+  Serial.print(__LOG.gyroZ);
+  Serial.print(",");
+  Serial.print(__LOG.brakePressure);
+  Serial.print(",");
+  Serial.print(__LOG.tps);
+  Serial.print(",");
+  Serial.print(__LOG.potValue);
+  Serial.print(",");
+  Serial.print(__LOG.CounterPulses);
+  Serial.print(",");
+  Serial.print(__LOG.GroundSpeed);
+  Serial.print(",");
+  Serial.print(__LOG.Heading);
+  Serial.print(",");
+  Serial.print(__LOG.Latitude);
+  Serial.print(",");
+  Serial.print(__LOG.Longitude);
+  Serial.print(",");
+  Serial.print(__LOG.Altitude);
+  Serial.print(",");
+  Serial.println(__LOG.elapsedTime);    
 }
 
 void MPU6050_init(){
@@ -206,40 +259,60 @@ void MPU6050_init(){
   }
 }
 bool initTimers(uint16_t  freq){
-  uint16_t prescaler;
+  // uint16_t prescaler;
   
-  uint16_t period = 1000000/freq;
-  uint16_t compare = 0;
+  // uint16_t period = 1000000/freq;
+  // uint16_t compare = 0;
 
   cli();                                                                        // Disable all interrupts                  
 
-  TCCR1A = 0;                                                                   // Init Timer1
-  TCCR1B = 0;                                                                   // Init Timer1
-  TIMSK1 = 0;                                                                   // Timer/Counter1 Interrupt Mask Register
-  TCNT1 = 0;     
+  // TCCR1A = 0;                                                                   // Init Timer1
+  // TCCR1B = 0;                                                                   // Init Timer1
+  // TIMSK1 = 0;                                                                   // Timer/Counter1 Interrupt Mask Register
+  // TCNT1 = 0;     
 
-  TCCR1B |= (1 << WGM12);                                                       // CTC
+  // TCCR1B |= (1 << WGM12);                                                       // CTC
 
-  if (period < 65536){
-    prescaler = 1;
-    compare = period;
-  } else if (period < 65536*8){
-    prescaler = 8;
-    compare = period/8;
-  } else if (period < 65536*64){
-    prescaler = 64;
-    compare = period/64;
-  } else if (period < 65536*256){
-    prescaler = 256;
-    compare = period/256;
-  } else if (period < 65536*1024){
-    prescaler = 1024;
-    compare = period/1024;
-  } else return false;
+  // if (period < 65536){
+  //   prescaler = 1;
+  //   compare = period;
+  // } else if (period < 65536*8){
+  //   prescaler = 8;
+  //   compare = period/8;
+  // } else if (period < 65536*64){
+  //   prescaler = 64;
+  //   compare = period/64;
+  // } else if (period < 65536*256){
+  //   prescaler = 256;
+  //   compare = period/256;
+  // } else if (period < 65536*1024){
+  //   prescaler = 1024;
+  //   compare = period/1024;
+  // } else return false;
 
-  OCR1A = compare;
+  // OCR1A = compare;
+  // TCCR1B |= (1 << WGM12);
+  // TCCR1B |= (1 << CS12);
+  // TIMSK1 |= (1 << OCIE1A);
+
+  // Calculate the top value for Timer1
+  unsigned int topValue = (F_CPU / (__SAMPLING_RATE__ * 8)) - 1;
+
+  // Set the Timer1 mode to CTC (Clear Timer on Compare Match)
+  TCCR1A &= ~(1 << WGM10);
+  TCCR1A &= ~(1 << WGM11);
   TCCR1B |= (1 << WGM12);
-  TCCR1B |= (1 << CS12);
+  TCCR1B &= ~(1 << WGM13);
+
+  // Set the prescaler to 8
+  TCCR1B &= ~(1 << CS10);
+  TCCR1B |= (1 << CS11);
+  TCCR1B &= ~(1 << CS12);
+
+  // Set the top value
+  OCR1A = topValue;
+
+  // Enable the Timer1 compare interrupt A
   TIMSK1 |= (1 << OCIE1A);
 
 
@@ -260,7 +333,10 @@ bool initTimers(uint16_t  freq){
   
   TCCR5B |= (1 << CS52);                                                        // Set CS32 to 1
   TCCR5B |= (1 << CS51);                                                        // Set CS31 to 1          
-  TCCR5B &= ~(1 << CS50);                                                       // Set CS30 to 0        
+  TCCR5B &= ~(1 << CS50);                                                       // Set CS30 to 0     
+
+  // Enable the Input Capture Noise Canceler
+  TCCR5B |= (1 << ICNC5);   
 
   sei();                                                                        // Enable all interrupts                                                                 
 
@@ -268,42 +344,43 @@ bool initTimers(uint16_t  freq){
 } 
 
 inline void __attribute__ ((always_inline))  readGPS(){
-  __LOG.GPS_Valid = false;
-  if(Serial1.available()){
+  // __LOG.GPS_Valid = false;
+  // if(Serial1.available()){
 
-    int bufsize = 256;
-    char buf[bufsize];
-    packet_t packet;
-    String	something =	Serial1.readStringUntil('\n').substring(3);	            //	Read the GPS data from the serial port
+  //   int bufsize = 256;
+  //   char buf[bufsize];
+  //   packet_t packet;
+  //   String	something =	Serial1.readStringUntil('\n').substring(3);	            //	Read the GPS data from the serial port
 
-    something.toCharArray(buf,bufsize);				                                  // Convert the GPS data to char array
-    packet= read(buf);                                                          // Parse the GPS data
+  //   something.toCharArray(buf,bufsize);				                                  // Convert the GPS data to char array
+  //   packet= read(buf);                                                          // Parse the GPS data
 
-    if (packet.format == VTG){                                                  // Check if the data is a VTG message
+  //   if (packet.format == VTG){                                                  // Check if the data is a VTG message
 
-      __LOG.SpeedGPS = packet.message.VTG.SpeedOverGround;                      // Get the speed from the GPS data
-      __LOG.GPS_Valid = true;                                                   // Mark the GPS data as valid
+  //     __LOG.SpeedGPS = packet.message.VTG.SpeedOverGround;                      // Get the speed from the GPS data
+  //     __LOG.GPS_Valid = true;                                                   // Mark the GPS data as valid
 
-    }else if (packet.format == GGA){                                            // Check if the data is a GGA message
+  //   }else if (packet.format == GGA){                                            // Check if the data is a GGA message
 
+  //     strcpy(__LOG.Latitude, packet.message.GGA.Latitude);
 
+  //     strcpy(__LOG.Longitude, packet.message.GGA.Longitude);
 
-      strcpy(__LOG.Latitude, packet.message.GGA.Latitude);
+  //     __LOG.NSIndicator = packet.message.GGA.NSIndicator;
 
-      strcpy(__LOG.Longitude, packet.message.GGA.Longitude);
+  //     __LOG.EWIndicator = packet.message.GGA.EWIndicator;
 
-      __LOG.NSIndicator = packet.message.GGA.NSIndicator;
+  //     __LOG.FixQuality = packet.message.GGA.FixQuality;
 
-      __LOG.EWIndicator = packet.message.GGA.EWIndicator;
+  //     // Serial.print("Latitude : ");
+  //     // Serial.println(packet.message.GGA.Latitude);
+  //     // Serial.print("Longitude : ");
+  //     // Serial.println(packet.message.GGA.Longitude);
+  //   } 
+  // }
 
-      __LOG.FixQuality = packet.message.GGA.FixQuality;
-
-      // Serial.print("Latitude : ");
-      // Serial.println(packet.message.GGA.Latitude);
-      // Serial.print("Longitude : ");
-      // Serial.println(packet.message.GGA.Longitude);
-    } 
-  }
+  myGNSS.checkUblox(); // Check for the arrival of new data and process it.
+  myGNSS.checkCallbacks(); // Check if any callbacks are waiting to be processed.
 }
 
 /**
@@ -334,7 +411,6 @@ inline void __attribute__ ((always_inline))  readVariousSensors(){
  * @brief Writes the log values to the SD card in the format of a CSV file.
  */
 inline void __attribute__ ((always_inline))  WriteToSD(){
-  
   dataFile.print(__LOG.accelerationX);
   dataFile.print(",");
   dataFile.print(__LOG.accelerationY);
@@ -353,22 +429,19 @@ inline void __attribute__ ((always_inline))  WriteToSD(){
   dataFile.print(",");
   dataFile.print(__LOG.potValue);
   dataFile.print(",");
-  dataFile.print(__LOG.SpeedGPS);
+  dataFile.print(__LOG.CounterPulses);
+  dataFile.print(",");
+  dataFile.print(__LOG.GroundSpeed);
+  dataFile.print(",");
+  dataFile.print(__LOG.Heading);
   dataFile.print(",");
   dataFile.print(__LOG.Latitude);
   dataFile.print(",");
-  dataFile.print(__LOG.NSIndicator);
-  dataFile.print(",");
   dataFile.print(__LOG.Longitude);
   dataFile.print(",");
-  dataFile.print(__LOG.EWIndicator);
+  dataFile.print(__LOG.Altitude);
   dataFile.print(",");
-  dataFile.print(__LOG.FixQuality);
-  dataFile.print(",");
-  dataFile.print(__LOG.GPS_Valid);
-  dataFile.print(",");
-  dataFile.println(__LOG.elapsedTime);
-  dataFile.flush();
+  dataFile.println(__LOG.elapsedTime);    
 }
 
 void ISR_startRecording(){
@@ -393,10 +466,11 @@ void ISR_stopRecording(){
  * 
  */
 ISR(TIMER1_COMPA_vect){
-  if (WINDOW){
+  if (WINDOW) {
     VEC[ERREG_ARD] |= (1 << SAMPLING_RATE_LOW);
+    // Serial.print('.');
   }
-  WINDOW = !WINDOW;
+  WINDOW = true;
 }
 
 
@@ -432,7 +506,7 @@ void setup() {
   dataFile ? Serial.println(F("\t\t\tPASS")) : Serial.println(F("\t\t\tFAIL"));
 
   Serial.print(F("Initializing GPS :"));
-  initGPS();
+  initGPS(&myGNSS);
   Serial.println("\t\t\tPASS");
 
   Serial.print(F("Setting up the interrupts :"));
@@ -460,21 +534,42 @@ void loop()	{
   // if (!IMU_present) return;
   // if (!SD_present) return;
   if	(recording)	{
+
+    if (!WINDOW) return;
+
+    // unsigned long t1,t2,t3,t4,t5;
+    // t1 = micros();
     
+    digitalWrite(46,HIGH);
     readGPS();			                                                          // Wait	for	VTG	messsage and print speed in	Serial.	 
     
-    if (!WINDOW) return;
+    // t2 = micros();
+    // Serial.print(t2-t1);
+    // Serial.print("|");
     
     /*  Read data from	MPU6050 */
     mpu.getMotion6(&__LOG.accelerationX, &__LOG.accelerationY, &__LOG.accelerationZ, &__LOG.gyroX, &__LOG.gyroY, &__LOG.gyroZ);
      
+    // t3 = micros();
+    // Serial.print(t3-t2);
+    // Serial.print("|");
+
     readVariousSensors();
+
+    // t4 = micros();
+    // Serial.print(t4-t3);
+    // Serial.print("|");
     
     if(SERIAL_LOGGIN) SerialPrintLog();                                         // Print the data
     if(SD_LOGGIN) WriteToSD();                                                  // Write the data to the SD card
 
-    __LOG.elapsedTime = millis() - StartTime;                                   // Calculate the elapsed time   
+    __LOG.elapsedTime = micros() - StartTime;                                   // Calculate the elapsed time   
 
     WINDOW = false;                                                             // Set the window flag to false
+  
+
+    digitalWrite(46,LOW);
+    // t5 = micros ();
+    // Serial.println(t5-t4);
   }
 }
