@@ -13,25 +13,36 @@
 #include "ErrorHandler.h"
 #include "NMEA_Parser.h"
 
-#define SERIAL_LOGGIN false
-#define SD_LOGGIN false
+static bool SERIAL_LOGGIN = false;
+static bool SD_LOGGIN = false;
+static bool PARALLEL_LOGGING = false;
 
 #define TARGET_SAMPLING_RATE 500
 #define BAUD_RATE 250000
 
-/*  Button Declerations 
- *  PIN 47 is used by Timer5 to measure pulses
-*/
+/*  Button Declerations   */
 #define PIN_START_BUTTON 2
 #define PIN_STOP_BUTTON 3
 #define PIN_RESET_BUTTON 21
+#define PULSE_COUNTER 47
+
+/*      OUTPUT PORT     */
+#define OUTPUT_DATA_PORT PORTA
+#define OUTPUT_ADDR_PORT PORTL
+#define CLK_PIN 30
+
+/*  Sensor Declerations */
 #define	PIN_SUPPLY_SENSE A0
 #define PIN_STEERING_WHEEL A1
 #define PIN_BRAKE_PRESSURE A2
 #define PIN_TROTTLE_POSITION_SENSOR A3
+volatile uint8_t ADC_MUX_SELECT = 0x00;
+
+/*          LED         */
 #define LED LED_BUILTIN
 
-static volatile bool WINDOW = false;
+static volatile bool SAMPLE_WINDOW = false;
+static volatile bool ADC_WINDOW = false;
 volatile bool recording = false;
 volatile long StartTime = 0;
 volatile uint8_t FreqMem = 0;
@@ -72,10 +83,10 @@ typedef	struct information{
   uint16_t gyroX;
   uint16_t gyroY;
   uint16_t gyroZ;
-  uint16_t supplyVoltage;
-  uint16_t brakePressure;
-  uint16_t tps;
-  uint16_t potValue;
+  uint16_t Vref;
+  uint16_t BrakePressure;
+  uint16_t ThrottlePositionSensor;
+  uint16_t SteeringWheel;
   uint16_t CounterPulses;
   uint64_t GroundSpeed;
   uint64_t Heading;
@@ -90,6 +101,90 @@ typedef	struct information{
  */
 log_t __LOG;
 
+void WriteToExternalMem(){
+  uint8_t buffer[] = {
+    __LOG.accelerationX,
+    __LOG.accelerationX >> 8,
+    __LOG.accelerationY,
+    __LOG.accelerationY >> 8,
+    __LOG.accelerationZ,
+    __LOG.accelerationZ >> 8,
+    __LOG.gyroX,
+    __LOG.gyroX >> 8,
+    __LOG.gyroY,
+    __LOG.gyroY >> 8,
+    __LOG.gyroZ,
+    __LOG.gyroZ >> 8,
+    __LOG.Vref,
+    __LOG.Vref >> 8,
+    __LOG.BrakePressure,
+    __LOG.BrakePressure >> 8,
+    __LOG.ThrottlePositionSensor,
+    __LOG.ThrottlePositionSensor >> 8,
+    __LOG.SteeringWheel,
+    __LOG.SteeringWheel >> 8,
+    __LOG.CounterPulses,
+    __LOG.CounterPulses >> 8,
+    __LOG.GroundSpeed,
+    __LOG.GroundSpeed >> 8,
+    __LOG.GroundSpeed >> 16,
+    __LOG.GroundSpeed >> 24,
+    __LOG.GroundSpeed >> 32,
+    __LOG.GroundSpeed >> 40,
+    __LOG.GroundSpeed >> 48,
+    __LOG.GroundSpeed >> 56,
+    __LOG.Heading,
+    __LOG.Heading >> 8,
+    __LOG.Heading >> 16,
+    __LOG.Heading >> 24,
+    __LOG.Heading >> 32,
+    __LOG.Heading >> 40,
+    __LOG.Heading >> 48,
+    __LOG.Heading >> 56,
+    __LOG.Latitude,
+    __LOG.Latitude >> 8,
+    __LOG.Latitude >> 16,
+    __LOG.Latitude >> 24,
+    __LOG.Latitude >> 32,
+    __LOG.Latitude >> 40,
+    __LOG.Latitude >> 48,
+    __LOG.Latitude >> 56,
+    __LOG.Longitude,
+    __LOG.Longitude >> 8,
+    __LOG.Longitude >> 16,
+    __LOG.Longitude >> 24,
+    __LOG.Longitude >> 32,
+    __LOG.Longitude >> 40,
+    __LOG.Longitude >> 48,
+    __LOG.Longitude >> 56,
+    __LOG.Altitude,
+    __LOG.Altitude >> 8,
+    __LOG.Altitude >> 16,
+    __LOG.Altitude >> 24,
+    __LOG.Altitude >> 32,
+    __LOG.Altitude >> 40,
+    __LOG.Altitude >> 48,
+    __LOG.Altitude >> 56,
+    __LOG.elapsedTime,
+    __LOG.elapsedTime >> 8,
+    __LOG.elapsedTime >> 16,
+    __LOG.elapsedTime >> 24,
+    __LOG.elapsedTime >> 32,
+    __LOG.elapsedTime >> 40,
+    __LOG.elapsedTime >> 48,
+    __LOG.elapsedTime >> 56,
+  };
+
+  for (int i = 0 ; i < sizeof(buffer) ; i++ ){
+    PORTA = buffer[i];
+    // PORTA = (i % 2) == 0 ? 0x01 : 0x02;
+    PORTL = 0x01;
+    delayMicroseconds(1);
+    PORTL = 0x00;
+    delayMicroseconds(1);
+  }
+  PORTA = 0x00;
+}
 
 void printPVTdata(UBX_NAV_PVT_data_t *ubxDataStruct){
   __LOG.Latitude = ubxDataStruct->lat;
@@ -154,75 +249,87 @@ bool initGPS(SFE_UBLOX_GNSS *myGNSS) {
   myGNSS->setAutoPVTcallbackPtr(&printPVTdata); // Enable automatic NAV PVT messages with callback to printPVTdata
 }
 
-inline void __attribute__ ((always_inline))  SerialPrintUint16(const uint16_t _ss){
-  Serial.write(_ss >> 8);
-  Serial.write(_ss);
-}
-
-inline void __attribute__ ((always_inline))  SerialPrintUint64(const uint64_t _ss){
-  for (int i = 0; i < 8; i++){
-    uint8_t b = _ss >> (8*(7-i));
-    Serial.write(b);
-  }
-}
-
 /**
  * @brief Prints the log values to the Serial Monitor according to the format.
  */
 inline void __attribute__ ((always_inline))  SerialPrintLog(){
-  SerialPrintUint16(__LOG.accelerationX);
-  Serial.println();
-  Serial.write('|');
+  uint8_t buffer[] = {
+    __LOG.accelerationX,
+    __LOG.accelerationX >> 8,
+    __LOG.accelerationY,
+    __LOG.accelerationY >> 8,
+    __LOG.accelerationZ,
+    __LOG.accelerationZ >> 8,
+    __LOG.gyroX,
+    __LOG.gyroX >> 8,
+    __LOG.gyroY,
+    __LOG.gyroY >> 8,
+    __LOG.gyroZ,
+    __LOG.gyroZ >> 8,
+    __LOG.Vref,
+    __LOG.Vref >> 8,
+    __LOG.BrakePressure,
+    __LOG.BrakePressure >> 8,
+    __LOG.ThrottlePositionSensor,
+    __LOG.ThrottlePositionSensor >> 8,
+    __LOG.SteeringWheel,
+    __LOG.SteeringWheel >> 8,
+    __LOG.CounterPulses,
+    __LOG.CounterPulses >> 8,
+    __LOG.GroundSpeed,
+    __LOG.GroundSpeed >> 8,
+    __LOG.GroundSpeed >> 16,
+    __LOG.GroundSpeed >> 24,
+    __LOG.GroundSpeed >> 32,
+    __LOG.GroundSpeed >> 40,
+    __LOG.GroundSpeed >> 48,
+    __LOG.GroundSpeed >> 56,
+    __LOG.Heading,
+    __LOG.Heading >> 8,
+    __LOG.Heading >> 16,
+    __LOG.Heading >> 24,
+    __LOG.Heading >> 32,
+    __LOG.Heading >> 40,
+    __LOG.Heading >> 48,
+    __LOG.Heading >> 56,
+    __LOG.Latitude,
+    __LOG.Latitude >> 8,
+    __LOG.Latitude >> 16,
+    __LOG.Latitude >> 24,
+    __LOG.Latitude >> 32,
+    __LOG.Latitude >> 40,
+    __LOG.Latitude >> 48,
+    __LOG.Latitude >> 56,
+    __LOG.Longitude,
+    __LOG.Longitude >> 8,
+    __LOG.Longitude >> 16,
+    __LOG.Longitude >> 24,
+    __LOG.Longitude >> 32,
+    __LOG.Longitude >> 40,
+    __LOG.Longitude >> 48,
+    __LOG.Longitude >> 56,
+    __LOG.Altitude,
+    __LOG.Altitude >> 8,
+    __LOG.Altitude >> 16,
+    __LOG.Altitude >> 24,
+    __LOG.Altitude >> 32,
+    __LOG.Altitude >> 40,
+    __LOG.Altitude >> 48,
+    __LOG.Altitude >> 56,
+    __LOG.elapsedTime,
+    __LOG.elapsedTime >> 8,
+    __LOG.elapsedTime >> 16,
+    __LOG.elapsedTime >> 24,
+    __LOG.elapsedTime >> 32,
+    __LOG.elapsedTime >> 40,
+    __LOG.elapsedTime >> 48,
+    __LOG.elapsedTime >> 56,
+  };
 
-  SerialPrintUint16(__LOG.accelerationY);
-  Serial.write('|');
-
-  SerialPrintUint16(__LOG.accelerationZ);
-  Serial.write('|');
-
-  SerialPrintUint16(__LOG.gyroX);
-  Serial.write('|');
-
-  SerialPrintUint16(__LOG.gyroY);
-  Serial.write('|');
-
-  SerialPrintUint16(__LOG.gyroZ);
-  Serial.write('|');
-
-  SerialPrintUint16(__LOG.supplyVoltage);
-  Serial.write('|');
-
-  SerialPrintUint16(__LOG.brakePressure);
-  Serial.write('|');
-
-  SerialPrintUint16(__LOG.tps);
-  Serial.write('|');
-
-  SerialPrintUint16(__LOG.potValue);
-  Serial.write('|');
-
-  SerialPrintUint16(__LOG.CounterPulses);
-  Serial.write('|');
-
-  SerialPrintUint64(__LOG.GroundSpeed);
-  Serial.write('|');
-
-  SerialPrintUint16(__LOG.Heading);
-  Serial.write('|');
-
-  SerialPrintUint64(__LOG.Latitude);
-  Serial.write('|');
-
-  SerialPrintUint64(__LOG.Longitude);
-  Serial.write('|');
-
-  SerialPrintUint64(__LOG.Altitude);
-  Serial.write('|');
-
-  SerialPrintUint64(__LOG.elapsedTime);
-  Serial.write('\n');
+  for(int i = 0 ; i < sizeof(buffer); i++ ){
+    Serial.print(buffer[i]);
+  }
 }
-
 
 
 void MPU6050_init(){
@@ -363,15 +470,15 @@ inline void __attribute__ ((always_inline))  readVariousSensors(){
    * tps = ReadVoltage(A1)/SupplyVoltage;                                  
    * potValue	= ((analogRead(potPin)/1023.0)-0.5)*SteeringWheel_RotationalRange/2;  
   */
-  analogReference(INTERNAL1V1);				                                        // Choose 1.1V internal reference
-  __LOG.supplyVoltage = analogRead(PIN_SUPPLY_SENSE);                         // Read the supply voltage
-  analogReference(DEFAULT);					                                          // Choose the default reference
-
-  __LOG.brakePressure = analogRead(PIN_BRAKE_PRESSURE);                       // Read the Brake Pressure
-  __LOG.tps = analogRead(PIN_TROTTLE_POSITION_SENSOR);                        // Read the Throttle Position Sensor
-  __LOG.potValue = analogRead(PIN_STEERING_WHEEL);                            // Read the Steering Wheel Position
 
   __LOG.CounterPulses = TCNT5;                                                // Get the counter pulses
+
+  // analogReference(INTERNAL1V1);				                                       // Choose 1.1V internal reference
+  ADMUX = (ADMUX & 0x3F) | (1 << REFS0) | (1 << REFS1);                       // Set Vref to internal 1V1
+  ADMUX = (ADMUX & 0xFC) | ADC_MUX_SELECT;                                    // Set the MUX to the first ADC pin
+
+  // Start the conversion
+  ADCSRA |= (1 << ADSC);  
 }
 /**
  * @brief Writes the log values to the SD card in the format of a CSV file.
@@ -389,11 +496,11 @@ inline void __attribute__ ((always_inline))  WriteToSD(){
   dataFile.print(",");
   dataFile.print(__LOG.gyroZ);
   dataFile.print(",");
-  dataFile.print(__LOG.brakePressure);
+  dataFile.print(__LOG.BrakePressure);
   dataFile.print(",");
-  dataFile.print(__LOG.tps);
+  dataFile.print(__LOG.ThrottlePositionSensor);
   dataFile.print(",");
-  dataFile.print(__LOG.potValue);
+  dataFile.print(__LOG.SteeringWheel);
   dataFile.print(",");
   dataFile.print(__LOG.CounterPulses);
   dataFile.print(",");
@@ -410,6 +517,24 @@ inline void __attribute__ ((always_inline))  WriteToSD(){
   // dataFile.println(__LOG.elapsedTime);    
 }
 
+
+/**
+ * @brief Initializes the ADC
+ * 
+ * @note The ADC is initialized with the prescaler set to 128 
+ */
+inline void __attribute__ ((always_inline)) ADC_init(){
+  ADMUX |= (1 << REFS0);                                                      // Set the reference voltage to AVCC
+  
+  ADCSRB = (ADCSRB & 0x70) | (1 << ADTS2) | (1 << ADTS1);                     // Sets Trigger source to Timer1 Overflow
+  DIDR0 = 0xff;                                                               // Disable Login Inputs from Analog Pins
+  DIDR2 = 0xff;                                                               // Disable Login Inputs from Analog Pins
+
+  // set an interrupt for when the conversion is complete 
+  ADCSRA |= (1 << ADIE);
+  ADCSRA |= (1 << ADEN);                                                          // Enable the ADC
+}
+
 void ISR_startRecording(){
   recording = true;
   TIMSK1 |= (1 << OCIE1A);                                                    // Enable the Timer1 compare interrupt A
@@ -424,26 +549,53 @@ void ISR_stopRecording(){
   if(SD_present) dataFile.close();
 }
 
+
 /**
- * @brief When the compare match occurs in Timer1, the ISR sets the window flag. When set, data  are sampled.
+ * @brief When the compare match occurs in Timer1, the ISR sets the SAMPLE_WINDOW flag. When set, data  are sampled.
  * 
  * @note This is the interrupt service routine for the Timer1 compare match
  * @see initTimers()
  * 
  */
 ISR(TIMER1_COMPA_vect){
-  if (WINDOW) {
+  if (SAMPLE_WINDOW) {
     VEC[ERREG_ARD] |= (1 << SAMPLING_RATE_LOW);
-    if (FreqMem++ == 100){
+    if (FreqMem++ >= 100){
       __SAMPLING_RATE__ -= __SAMPLING_RATE__*0.05;
       initTimers(__SAMPLING_RATE__);
 
       Serial.println("Sampling rate decreased at : " +String(__SAMPLING_RATE__));
     }
   }
-  WINDOW = true;
+  FreqMem -= (FreqMem > 0);
+  SAMPLE_WINDOW = true;
 }
 
+ISR(ADC_vect){
+  switch(ADC_MUX_SELECT){
+    case 0x00:
+      __LOG.Vref = ADC;
+      analogReference(DEFAULT);					                                      // Choose the default reference
+      break;
+    case 0x01:
+      __LOG.SteeringWheel = ADC;
+      break;
+    case 0x02:
+      __LOG.BrakePressure = ADC;
+      break;
+    case 0x03:
+      __LOG.ThrottlePositionSensor = ADC;
+      break;
+  } 
+ 
+  // increment ADC_MUX_SELECT from 0x00 to 0x03 looping back when done
+  ADC_MUX_SELECT = (ADC_MUX_SELECT + 1) & 0x03;
+
+  ADMUX = (ADMUX & 0xF8) | ADC_MUX_SELECT;                                    // Set the MUX to the next ADC pin
+  if (ADC_MUX_SELECT != 0x00){ 
+    ADCSRA |= (1 << ADSC);                                                    // Start the conversion
+  }
+}
 
 void setup() {
   clearError();
@@ -465,10 +617,15 @@ void setup() {
   pinMode(PIN_START_BUTTON, INPUT_PULLUP);
   pinMode(PIN_STOP_BUTTON, INPUT_PULLUP);
   pinMode(PIN_RESET_BUTTON, INPUT_PULLUP);
+  pinMode(CLK_PIN, OUTPUT);
   pinMode(LED, OUTPUT);
   digitalWrite(LED,HIGH);
   delay(500);
   digitalWrite(LED,LOW);
+  Serial.println(F("\t\t\tPASS"));
+
+  Serial.print(F("Initializing pins "));
+  ADC_init();
   Serial.println(F("\t\t\tPASS"));
 
   Serial.print(F("Initializing Watchdog :"));
@@ -529,11 +686,42 @@ void setup() {
 
 void loop()	{
   wdt_reset();                                                                // Reset the watchdog timer
+
+  if(Serial.available()){
+    
+    String incomingMessage = Serial.readStringUntil('\n');
+    // incomingMessage.setCharAt(incomingMessage.indexOf('\r'),'');
+
+    if (incomingMessage.equals("Start")){
+      Serial.println("Starting");
+      recording = true;
+      TIMSK1 |= (1 << OCIE1A);                                                    // Enable the Timer1 compare interrupt A
+      StartTime = millis();
+      digitalWrite(LED, HIGH);
+    } else if (incomingMessage.equals("Stop")){
+      recording = false;
+      digitalWrite(LED, LOW);
+      Serial.println("Stoping");
+    } else if (incomingMessage.equals("EnableSerial")){
+      SERIAL_LOGGIN = true;
+      Serial.println("Enabling Serial");
+    } else if (incomingMessage.equals("DisableSerial")){
+      SERIAL_LOGGIN = false;
+      Serial.println("Disabling Serial");
+    } else if (incomingMessage.equals("EnableParallel")){
+      PARALLEL_LOGGING = true;
+      Serial.println("Enabling Parallel interface");
+    } else if (incomingMessage.equals("DisableParallel")){
+      PARALLEL_LOGGING = false;
+      Serial.println("Disabling Parallel interface");
+    }
+  }
+
+
   // if (!IMU_present) return;
   // if (!SD_present) return;
   if	(recording)	{
-
-    if (!WINDOW) return;
+    if (!SAMPLE_WINDOW) return;
     
     digitalWrite(46,HIGH);
     readGPS();			                                                          // Wait	for	VTG	messsage and print speed in	Serial.	 
@@ -545,12 +733,12 @@ void loop()	{
     
     if(SERIAL_LOGGIN) SerialPrintLog();                                         // Print the data
     if(SD_LOGGIN) WriteToSD();                                                  // Write the data to the SD card
+    if(PARALLEL_LOGGING) WriteToExternalMem();
 
     __LOG.elapsedTime = micros() - StartTime;                                   // Calculate the elapsed time   
 
-    WINDOW = false;                                                             // Set the window flag to false
+    SAMPLE_WINDOW = false;                                                      // Set the SAMPLE_ flag to false
   
-
     digitalWrite(46,LOW);
   }
 }
