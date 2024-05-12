@@ -17,7 +17,7 @@ static bool SERIAL_LOGGIN = false;
 static bool SD_LOGGIN = false;
 static bool PARALLEL_LOGGING = false;
 
-#define TARGET_SAMPLING_RATE 500
+uint8_t TARGET_SAMPLING_RATE = 500;
 #define BAUD_RATE 250000
 
 /*  Button Declerations   */
@@ -55,6 +55,10 @@ static MPU6050 mpu;
 static File dataFile;    
 static SFE_UBLOX_GNSS myGNSS;
 
+static HardwareSerial *LOG_SERIAL = &Serial;
+static HardwareSerial *GPS_SERIAL = &Serial1;
+static HardwareSerial *DBG_SERIAL = &Serial;
+
 unsigned long __SAMPLING_RATE__ = TARGET_SAMPLING_RATE;
 
 /**
@@ -77,12 +81,12 @@ unsigned long __SAMPLING_RATE__ = TARGET_SAMPLING_RATE;
  * @see SerialPrintLog() 
  */
 typedef	struct information{
-  uint16_t accelerationX;
-  uint16_t accelerationY;
-  uint16_t accelerationZ;
-  uint16_t gyroX;
-  uint16_t gyroY;
-  uint16_t gyroZ;
+  int16_t accelerationX;
+  int16_t accelerationY;
+  int16_t accelerationZ;
+  int16_t gyroX;
+  int16_t gyroY;
+  int16_t gyroZ;
   uint16_t Vref;
   uint16_t BrakePressure;
   uint16_t ThrottlePositionSensor;
@@ -101,79 +105,94 @@ typedef	struct information{
  */
 log_t __LOG;
 
-void WriteToExternalMem(){
-  uint8_t buffer[] = {
-    __LOG.accelerationX,
-    __LOG.accelerationX >> 8,
-    __LOG.accelerationY,
-    __LOG.accelerationY >> 8,
-    __LOG.accelerationZ,
-    __LOG.accelerationZ >> 8,
-    __LOG.gyroX,
-    __LOG.gyroX >> 8,
-    __LOG.gyroY,
-    __LOG.gyroY >> 8,
-    __LOG.gyroZ,
-    __LOG.gyroZ >> 8,
-    __LOG.Vref,
-    __LOG.Vref >> 8,
-    __LOG.BrakePressure,
-    __LOG.BrakePressure >> 8,
-    __LOG.ThrottlePositionSensor,
-    __LOG.ThrottlePositionSensor >> 8,
-    __LOG.SteeringWheel,
-    __LOG.SteeringWheel >> 8,
-    __LOG.CounterPulses,
-    __LOG.CounterPulses >> 8,
-    __LOG.GroundSpeed,
-    __LOG.GroundSpeed >> 8,
-    __LOG.GroundSpeed >> 16,
-    __LOG.GroundSpeed >> 24,
-    __LOG.GroundSpeed >> 32,
-    __LOG.GroundSpeed >> 40,
-    __LOG.GroundSpeed >> 48,
-    __LOG.GroundSpeed >> 56,
-    __LOG.Heading,
-    __LOG.Heading >> 8,
-    __LOG.Heading >> 16,
-    __LOG.Heading >> 24,
-    __LOG.Heading >> 32,
-    __LOG.Heading >> 40,
-    __LOG.Heading >> 48,
-    __LOG.Heading >> 56,
-    __LOG.Latitude,
-    __LOG.Latitude >> 8,
-    __LOG.Latitude >> 16,
-    __LOG.Latitude >> 24,
-    __LOG.Latitude >> 32,
-    __LOG.Latitude >> 40,
-    __LOG.Latitude >> 48,
-    __LOG.Latitude >> 56,
-    __LOG.Longitude,
-    __LOG.Longitude >> 8,
-    __LOG.Longitude >> 16,
-    __LOG.Longitude >> 24,
-    __LOG.Longitude >> 32,
-    __LOG.Longitude >> 40,
-    __LOG.Longitude >> 48,
-    __LOG.Longitude >> 56,
-    __LOG.Altitude,
-    __LOG.Altitude >> 8,
-    __LOG.Altitude >> 16,
-    __LOG.Altitude >> 24,
-    __LOG.Altitude >> 32,
-    __LOG.Altitude >> 40,
-    __LOG.Altitude >> 48,
-    __LOG.Altitude >> 56,
-    __LOG.elapsedTime,
-    __LOG.elapsedTime >> 8,
-    __LOG.elapsedTime >> 16,
-    __LOG.elapsedTime >> 24,
-    __LOG.elapsedTime >> 32,
-    __LOG.elapsedTime >> 40,
-    __LOG.elapsedTime >> 48,
-    __LOG.elapsedTime >> 56,
-  };
+void LogToBuffer(uint8_t* buffer){
+  buffer[0] = __LOG.accelerationX;
+  buffer[1] = __LOG.accelerationX >> 8;
+  buffer[2]=  __LOG.accelerationY;
+  buffer[3]=  __LOG.accelerationY >> 8;
+  buffer[4] = __LOG.accelerationZ;
+  buffer[5] = __LOG.accelerationZ >> 8;
+  buffer[6] = __LOG.gyroX;
+  buffer[7] = __LOG.gyroX >> 8;
+  buffer[8] = __LOG.gyroY;
+  buffer[9] = __LOG.gyroY >> 8;
+  buffer[10] = __LOG.gyroZ;
+  buffer[11] = __LOG.gyroZ >> 8;
+  buffer[12] = __LOG.Vref;
+  buffer[13] = __LOG.Vref >> 8;
+  buffer[14] = __LOG.BrakePressure;
+  buffer[15] = __LOG.BrakePressure >> 8;
+  buffer[16] = __LOG.ThrottlePositionSensor;
+  buffer[17] = __LOG.ThrottlePositionSensor >> 8;
+  buffer[18] = __LOG.SteeringWheel;
+  buffer[19]=  __LOG.SteeringWheel >> 8;
+  buffer[20]=  __LOG.CounterPulses;
+  buffer[21]=  __LOG.CounterPulses >> 8;
+  buffer[22]=  __LOG.GroundSpeed;
+  buffer[23]=  __LOG.GroundSpeed >> 8;
+  buffer[24]=  __LOG.GroundSpeed >> 16;
+  buffer[25]=  __LOG.GroundSpeed >> 24;
+  buffer[26]=  __LOG.GroundSpeed >> 32;
+  buffer[27]=  __LOG.GroundSpeed >> 40;
+  buffer[28]=  __LOG.GroundSpeed >> 48;
+  buffer[29]=  __LOG.GroundSpeed >> 56;
+  buffer[30]=  __LOG.Heading;
+  buffer[31]=  __LOG.Heading >> 8;
+  buffer[32]=  __LOG.Heading >> 16;
+  buffer[33]=  __LOG.Heading >> 24;
+  buffer[34]=  __LOG.Heading >> 32;
+  buffer[35]=  __LOG.Heading >> 40;
+  buffer[36]=  __LOG.Heading >> 48;
+  buffer[37]=  __LOG.Heading >> 56;
+  buffer[38]=  __LOG.Latitude;
+  buffer[39]=  __LOG.Latitude >> 8;
+  buffer[40]=  __LOG.Latitude >> 16;
+  buffer[41]=  __LOG.Latitude >> 24;
+  buffer[42]=  __LOG.Latitude >> 32;
+  buffer[43]=  __LOG.Latitude >> 40;
+  buffer[44]=  __LOG.Latitude >> 48;
+  buffer[45]=  __LOG.Latitude >> 56;
+  buffer[46]=  __LOG.Longitude;
+  buffer[47]=  __LOG.Longitude >> 8;
+  buffer[48]=  __LOG.Longitude >> 16;
+  buffer[49]=  __LOG.Longitude >> 24;
+  buffer[50]=  __LOG.Longitude >> 32;
+  buffer[51]=  __LOG.Longitude >> 40;
+  buffer[52]=  __LOG.Longitude >> 48;
+  buffer[53]=  __LOG.Longitude >> 56;
+  buffer[54]=  __LOG.Altitude;
+  buffer[55]=  __LOG.Altitude >> 8;
+  buffer[56]=  __LOG.Altitude >> 16;
+  buffer[57]=  __LOG.Altitude >> 24;
+  buffer[58]=  __LOG.Altitude >> 32;
+  buffer[59]=  __LOG.Altitude >> 40;
+  buffer[60]=  __LOG.Altitude >> 48;
+  buffer[61]=  __LOG.Altitude >> 56;
+  buffer[62]=  __LOG.elapsedTime;
+  buffer[63]=  __LOG.elapsedTime >> 8;
+  buffer[64]=  __LOG.elapsedTime >> 16;
+  buffer[65]=  __LOG.elapsedTime >> 24;
+  buffer[66]=  __LOG.elapsedTime >> 32;
+  buffer[67]=  __LOG.elapsedTime >> 40;
+  buffer[68]=  __LOG.elapsedTime >> 48;
+  buffer[69]=  __LOG.elapsedTime >> 56;
+}
+
+inline void __attribute__ ((always_inline)) (*exportFunc)(void) = NULL;
+
+inline void __attribute__ ((always_inline)) SerialPrintLog(){
+  uint8_t buffer[sizeof(log_t)];
+  LogToBuffer(buffer);
+
+  Serial3.write(buffer, sizeof(buffer));
+  for(int i = 0 ; i < sizeof(buffer); i++ ){
+    Serial3.write(buffer[i]);
+  }
+  // Serial.write('\n');
+}
+inline void __attribute__ ((always_inline)) WriteToExternalMem(){
+  uint8_t buffer[sizeof(log_t)];
+  LogToBuffer(buffer);
 
   for (int i = 0 ; i < sizeof(buffer) ; i++ ){
     PORTA = buffer[i];
@@ -185,6 +204,40 @@ void WriteToExternalMem(){
   }
   PORTA = 0x00;
 }
+inline void __attribute__ ((always_inline))  WriteToSD(){
+  dataFile.print(__LOG.accelerationX);
+  dataFile.print(",");
+  dataFile.print(__LOG.accelerationY);
+  dataFile.print(",");
+  dataFile.print(__LOG.accelerationZ);
+  dataFile.print(",");
+  dataFile.print(__LOG.gyroX);
+  dataFile.print(",");
+  dataFile.print(__LOG.gyroY);
+  dataFile.print(",");
+  dataFile.print(__LOG.gyroZ);
+  dataFile.print(",");
+  dataFile.print(__LOG.BrakePressure);
+  dataFile.print(",");
+  dataFile.print(__LOG.ThrottlePositionSensor);
+  dataFile.print(",");
+  dataFile.print(__LOG.SteeringWheel);
+  dataFile.print(",");
+  dataFile.print(__LOG.CounterPulses);
+  dataFile.print(",");
+  // dataFile.print(__LOG.GroundSpeed);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.Heading);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.Latitude);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.Longitude);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.Altitude);
+  // dataFile.print(",");
+  // dataFile.println(__LOG.elapsedTime);    
+}
+
 
 void printPVTdata(UBX_NAV_PVT_data_t *ubxDataStruct){
   __LOG.Latitude = ubxDataStruct->lat;
@@ -247,88 +300,6 @@ bool initGPS(SFE_UBLOX_GNSS *myGNSS) {
   myGNSS->setUART1Output(COM_TYPE_UBX);
   myGNSS->saveConfigSelective(VAL_CFG_SUBSEC_IOPORT);
   myGNSS->setAutoPVTcallbackPtr(&printPVTdata); // Enable automatic NAV PVT messages with callback to printPVTdata
-}
-
-/**
- * @brief Prints the log values to the Serial Monitor according to the format.
- */
-inline void __attribute__ ((always_inline))  SerialPrintLog(){
-  uint8_t buffer[] = {
-    __LOG.accelerationX,
-    __LOG.accelerationX >> 8,
-    __LOG.accelerationY,
-    __LOG.accelerationY >> 8,
-    __LOG.accelerationZ,
-    __LOG.accelerationZ >> 8,
-    __LOG.gyroX,
-    __LOG.gyroX >> 8,
-    __LOG.gyroY,
-    __LOG.gyroY >> 8,
-    __LOG.gyroZ,
-    __LOG.gyroZ >> 8,
-    __LOG.Vref,
-    __LOG.Vref >> 8,
-    __LOG.BrakePressure,
-    __LOG.BrakePressure >> 8,
-    __LOG.ThrottlePositionSensor,
-    __LOG.ThrottlePositionSensor >> 8,
-    __LOG.SteeringWheel,
-    __LOG.SteeringWheel >> 8,
-    __LOG.CounterPulses,
-    __LOG.CounterPulses >> 8,
-    __LOG.GroundSpeed,
-    __LOG.GroundSpeed >> 8,
-    __LOG.GroundSpeed >> 16,
-    __LOG.GroundSpeed >> 24,
-    __LOG.GroundSpeed >> 32,
-    __LOG.GroundSpeed >> 40,
-    __LOG.GroundSpeed >> 48,
-    __LOG.GroundSpeed >> 56,
-    __LOG.Heading,
-    __LOG.Heading >> 8,
-    __LOG.Heading >> 16,
-    __LOG.Heading >> 24,
-    __LOG.Heading >> 32,
-    __LOG.Heading >> 40,
-    __LOG.Heading >> 48,
-    __LOG.Heading >> 56,
-    __LOG.Latitude,
-    __LOG.Latitude >> 8,
-    __LOG.Latitude >> 16,
-    __LOG.Latitude >> 24,
-    __LOG.Latitude >> 32,
-    __LOG.Latitude >> 40,
-    __LOG.Latitude >> 48,
-    __LOG.Latitude >> 56,
-    __LOG.Longitude,
-    __LOG.Longitude >> 8,
-    __LOG.Longitude >> 16,
-    __LOG.Longitude >> 24,
-    __LOG.Longitude >> 32,
-    __LOG.Longitude >> 40,
-    __LOG.Longitude >> 48,
-    __LOG.Longitude >> 56,
-    __LOG.Altitude,
-    __LOG.Altitude >> 8,
-    __LOG.Altitude >> 16,
-    __LOG.Altitude >> 24,
-    __LOG.Altitude >> 32,
-    __LOG.Altitude >> 40,
-    __LOG.Altitude >> 48,
-    __LOG.Altitude >> 56,
-    __LOG.elapsedTime,
-    __LOG.elapsedTime >> 8,
-    __LOG.elapsedTime >> 16,
-    __LOG.elapsedTime >> 24,
-    __LOG.elapsedTime >> 32,
-    __LOG.elapsedTime >> 40,
-    __LOG.elapsedTime >> 48,
-    __LOG.elapsedTime >> 56,
-  };
-
-  for(int i = 0 ; i < sizeof(buffer); i++ ){
-    Serial.print(buffer[i]);
-  }
 }
 
 
@@ -452,8 +423,8 @@ bool initTimers(uint16_t  freq){
 } 
 
 inline void __attribute__ ((always_inline))  readGPS(){
-  myGNSS.checkUblox(); // Check for the arrival of new data and process it.
-  myGNSS.checkCallbacks(); // Check if any callbacks are waiting to be processed.
+  myGNSS.checkUblox();      // Check for the arrival of new data and process it.
+  myGNSS.checkCallbacks();  // Check if any callbacks are waiting to be processed.
 }
 
 /**
@@ -479,42 +450,6 @@ inline void __attribute__ ((always_inline))  readVariousSensors(){
 
   // Start the conversion
   ADCSRA |= (1 << ADSC);  
-}
-/**
- * @brief Writes the log values to the SD card in the format of a CSV file.
- */
-inline void __attribute__ ((always_inline))  WriteToSD(){
-  dataFile.print(__LOG.accelerationX);
-  dataFile.print(",");
-  dataFile.print(__LOG.accelerationY);
-  dataFile.print(",");
-  dataFile.print(__LOG.accelerationZ);
-  dataFile.print(",");
-  dataFile.print(__LOG.gyroX);
-  dataFile.print(",");
-  dataFile.print(__LOG.gyroY);
-  dataFile.print(",");
-  dataFile.print(__LOG.gyroZ);
-  dataFile.print(",");
-  dataFile.print(__LOG.BrakePressure);
-  dataFile.print(",");
-  dataFile.print(__LOG.ThrottlePositionSensor);
-  dataFile.print(",");
-  dataFile.print(__LOG.SteeringWheel);
-  dataFile.print(",");
-  dataFile.print(__LOG.CounterPulses);
-  dataFile.print(",");
-  // dataFile.print(__LOG.GroundSpeed);
-  // dataFile.print(",");
-  // dataFile.print(__LOG.Heading);
-  // dataFile.print(",");
-  // dataFile.print(__LOG.Latitude);
-  // dataFile.print(",");
-  // dataFile.print(__LOG.Longitude);
-  // dataFile.print(",");
-  // dataFile.print(__LOG.Altitude);
-  // dataFile.print(",");
-  // dataFile.println(__LOG.elapsedTime);    
 }
 
 
@@ -563,7 +498,7 @@ ISR(TIMER1_COMPA_vect){
     if (FreqMem++ >= 100){
       __SAMPLING_RATE__ -= __SAMPLING_RATE__*0.05;
       initTimers(__SAMPLING_RATE__);
-
+      SERIAL_LOGGIN = false;
       Serial.println("Sampling rate decreased at : " +String(__SAMPLING_RATE__));
     }
   }
@@ -599,6 +534,10 @@ ISR(ADC_vect){
 
 void setup() {
   clearError();
+
+  Serial.println(String("Size of log : " + sizeof(log_t)));
+
+  Serial3.begin(250000);
 
   Serial.begin(BAUD_RATE);
   while (!Serial && SERIAL_LOGGIN);
@@ -689,7 +628,8 @@ void loop()	{
 
   if(Serial.available()){
     
-    String incomingMessage = Serial.readStringUntil('\n');
+    String incomingMessage = Serial.readString();
+    Serial.println(String("Received : ") + incomingMessage);
     // incomingMessage.setCharAt(incomingMessage.indexOf('\r'),'');
 
     if (incomingMessage.equals("Start")){
@@ -714,6 +654,32 @@ void loop()	{
     } else if (incomingMessage.equals("DisableParallel")){
       PARALLEL_LOGGING = false;
       Serial.println("Disabling Parallel interface");
+    } else if (incomingMessage.equals("getSampleFrequency")){
+      Serial.println(String("Sample Frequency : ") + String(__SAMPLING_RATE__));
+    } else if (incomingMessage.startsWith("setSampleFrequency")){
+      __SAMPLING_RATE__ = incomingMessage.substring(13).toInt();
+      initTimers(__SAMPLING_RATE__);
+      Serial.println(String("Sample Frequency set to : ") + String(__SAMPLING_RATE__));
+    } else if (incomingMessage.equals("EnableSD")){
+      SD_LOGGIN = true;
+      Serial.println("Enabling SD card");
+    } else if (incomingMessage.equals("DisableSD")){
+      SD_LOGGIN = false;
+      Serial.println("Disabling SD card");
+    } else if (incomingMessage.equals("EnableWatchdog")){
+      wdt_enable(WDTO_8S);
+      Serial.println("Enabling Watchdog");
+    } else if (incomingMessage.equals("DisableWatchdog")){
+      wdt_disable();
+      Serial.println("Disabling Watchdog");
+    } else if (incomingMessage.equals("Reset")){
+      wdt_enable(WDTO_15MS);
+      Serial.println("Resetting");
+    } else if (incomingMessage.equals("EnableADCNoiseCanceler")){
+      ADCSRA |= (1 << ADATE);
+      Serial.println("Enabling ADC Noise Canceler");
+    } else if (incomingMessage.equals("DisableADCNoiseCanceler")){
+      ADCSRA &= ~(1 << ADATE);
     }
   }
 
@@ -737,7 +703,7 @@ void loop()	{
 
     __LOG.elapsedTime = micros() - StartTime;                                   // Calculate the elapsed time   
 
-    SAMPLE_WINDOW = false;                                                      // Set the SAMPLE_ flag to false
+    SAMPLE_WINDOW = false;                                                      // Close the "Window"
   
     digitalWrite(46,LOW);
   }
