@@ -22,7 +22,6 @@ char COMMAND_FREQUENCY_SET[] = "setSamplingFrequency";
 char COMMAND_SD_ENABLE[] = "EnableSD";
 char COMMAND_SD_DISABLE[] = "DisableSD";
 
-
 typedef union function{
   void (*Voidfunc)(void);
   void (*Setfunc)(unsigned int);
@@ -112,7 +111,7 @@ command_t commands[] = {
 /**
  * Handler for the commands. reads each char ,and like a binary tree, it goes through the commands
 */
-void SERCOMM_handler(const char* message, size_t len){
+void SERCOMM_handler(const char* message){
   for(int i = 0; i < sizeof(commands)/sizeof(commands[0]); i++){                                    // Go through the commands
     if(strncmp(message, commands[i].command, strlen(commands[i].command)) == 0){                    // If the command is found
       if(commands[i].function.Voidfunc != NULL){                                                    // If the function is a void function

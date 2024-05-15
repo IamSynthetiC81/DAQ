@@ -1,3 +1,5 @@
+#define lib_path "~/Arduino/libraries"
+
 #include <avr/wdt.h>
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
@@ -10,8 +12,8 @@
 #include <SD.h>
 
 #include "MPU6050_6Axis_MotionApps612.h"
-#include "ErrorHandler.h"
-#include "SERCOMM.h"
+#include "lib/ErrorHandler.h"
+#include "lib/SERCOMM.h"
 
 static bool SERIAL_LOGGIN = false;
 static bool SD_LOGGIN = false;
@@ -203,14 +205,8 @@ void LogToCharArray(char *buffer){
 inline void __attribute__ ((always_inline)) (*exportFunc)() = NULL;
 
 inline void __attribute__ ((always_inline)) SerialPrintLog(){
-  // uint8_t buffer[sizeof(log_t)];
-  // LogToBuffer(buffer);
-
-  // for(int i = 0 ; i < sizeof(buffer); i++ ){
-  //   str->write(buffer[i]);
-  // }
   char buffer[512];
-  sprintf(buffer, "%d | %d | %d | %d | %d | %d | %u | %u | %u | %u | %u | %l | %l | %l | %l | %l | %l \n\0",
+  sprintf(buffer, "%d | %d | %d | %d | %d | %d | %u | %u | %u | %u | %u | %ld | %ld | %ld | %ld | %ld | %ld \n\0",
   __LOG.accelerationX,
   __LOG.accelerationY,
   __LOG.accelerationZ,
@@ -230,11 +226,6 @@ inline void __attribute__ ((always_inline)) SerialPrintLog(){
   );
 
   Serial.println(buffer);
-
-  // for(int i = 0 ; i < 256 ; i++){
-  //   if (buffer[i] == '\n') return;
-  //   str->print(buffer[i]);
-  // }
 }
 inline void __attribute__ ((always_inline)) WriteToExternalMem(){
   uint8_t buffer[sizeof(log_t)];
@@ -626,19 +617,19 @@ ISR(ADC_vect){
   }
 }
 
-ISR(USART0_RX_vect){
-  char c = UDR0;
-  static char message[128];
-  static size_t len = 0;
+// ISR(USART0_RX_vect){
+//   char c = UDR0;
+//   static char message[128];
+//   static size_t len = 0;
 
-  if(c == '\n'){
-    message[len] = '\0';
-    SERCOMM_handler(message, len);
-    len = 0;
-  } else {
-    message[len++] = c;
-  }
-}
+//   if(c == '\n'){
+//     message[len] = '\0';
+//     SERCOMM_handler(message, len);
+//     len = 0;
+//   } else {
+//     message[len++] = c;
+//   }
+// }
 
 void setup() {
   clearError();
@@ -749,6 +740,13 @@ void loop()	{
     
     digitalWrite(46,HIGH);
     readGPS();			                                                          // Wait	for	VTG	messsage and print speed in	Serial.	 
+    if(Serial.available()){
+      
+      char buffer[256];
+      size_t size = Serial.readBytesUntil('\n', buffer , 256);
+      SERCOMM_handler(buffer);
+    }
+    
     
     /*  Read data from	MPU6050 */
     mpu.getMotion6(&__LOG.accelerationX, &__LOG.accelerationY, &__LOG.accelerationZ, &__LOG.gyroX, &__LOG.gyroY, &__LOG.gyroZ);
