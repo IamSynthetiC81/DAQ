@@ -46,7 +46,7 @@ enum GN1_ERROR_CODES{
 };
 
 void clearError(){
-  size_t length = sizeof(VEC);
+  int length = sizeof(VEC);
 
   for (int i = 0 ; i < length ; i++ ){
     VEC[i] = 0x00;

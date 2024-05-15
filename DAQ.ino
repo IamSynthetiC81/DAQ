@@ -11,13 +11,14 @@
 
 #include "MPU6050_6Axis_MotionApps612.h"
 #include "ErrorHandler.h"
-#include "NMEA_Parser.h"
+#include "SERCOMM.h"
 
 static bool SERIAL_LOGGIN = false;
 static bool SD_LOGGIN = false;
 static bool PARALLEL_LOGGING = false;
+static bool SERIAL_BRIDGE = false;
 
-uint8_t TARGET_SAMPLING_RATE = 500;
+uint16_t TARGET_SAMPLING_RATE = 500;
 #define BAUD_RATE 250000
 
 /*  Button Declerations   */
@@ -43,9 +44,8 @@ volatile uint8_t ADC_MUX_SELECT = 0x00;
 
 static volatile bool SAMPLE_WINDOW = false;
 static volatile bool ADC_WINDOW = false;
-volatile bool recording = false;
-volatile long StartTime = 0;
-volatile uint8_t FreqMem = 0;
+static volatile bool recording = false;
+static volatile long StartTime = 0;
 
 
 static bool IMU_present = false;
@@ -92,12 +92,12 @@ typedef	struct information{
   uint16_t ThrottlePositionSensor;
   uint16_t SteeringWheel;
   uint16_t CounterPulses;
-  uint64_t GroundSpeed;
-  uint64_t Heading;
-  uint64_t Latitude;
-  uint64_t Longitude;
-  uint64_t Altitude;
-  uint64_t elapsedTime;
+  long GroundSpeed;
+  long Heading;
+  long Latitude;
+  long Longitude;
+  long Altitude;
+  long elapsedTime;
 } log_t;
 
 /**
@@ -178,17 +178,63 @@ void LogToBuffer(uint8_t* buffer){
   buffer[69]=  __LOG.elapsedTime >> 56;
 }
 
-inline void __attribute__ ((always_inline)) (*exportFunc)(void) = NULL;
+void LogToCharArray(char *buffer){
+
+  sprintf(buffer, "%d | %d | %d | %d | %d | %d\n",__LOG.accelerationX,__LOG.accelerationY,__LOG.accelerationZ,__LOG.gyroX,__LOG.gyroY,__LOG.gyroZ);
+  // int16_t accelerationX;
+  // int16_t accelerationY;
+  // int16_t accelerationZ;
+  // int16_t gyroX;
+  // int16_t gyroY;
+  // int16_t gyroZ;
+  // uint16_t Vref;
+  // uint16_t BrakePressure;
+  // uint16_t ThrottlePositionSensor;
+  // uint16_t SteeringWheel;
+  // uint16_t CounterPulses;
+  // uint64_t GroundSpeed;
+  // uint64_t Heading;
+  // uint64_t Latitude;
+  // uint64_t Longitude;
+  // uint64_t Altitude;
+  // uint64_t elapsedTime;
+}
+
+inline void __attribute__ ((always_inline)) (*exportFunc)() = NULL;
 
 inline void __attribute__ ((always_inline)) SerialPrintLog(){
-  uint8_t buffer[sizeof(log_t)];
-  LogToBuffer(buffer);
+  // uint8_t buffer[sizeof(log_t)];
+  // LogToBuffer(buffer);
 
-  Serial3.write(buffer, sizeof(buffer));
-  for(int i = 0 ; i < sizeof(buffer); i++ ){
-    Serial3.write(buffer[i]);
-  }
-  // Serial.write('\n');
+  // for(int i = 0 ; i < sizeof(buffer); i++ ){
+  //   str->write(buffer[i]);
+  // }
+  char buffer[512];
+  sprintf(buffer, "%d | %d | %d | %d | %d | %d | %u | %u | %u | %u | %u | %l | %l | %l | %l | %l | %l \n\0",
+  __LOG.accelerationX,
+  __LOG.accelerationY,
+  __LOG.accelerationZ,
+  __LOG.gyroX,__LOG.gyroY,
+  __LOG.gyroZ,
+  __LOG.Vref,
+  __LOG.BrakePressure,
+  __LOG.ThrottlePositionSensor,
+  __LOG.SteeringWheel,
+  __LOG.CounterPulses,
+  __LOG.GroundSpeed,
+  __LOG.Heading,
+  __LOG.Latitude,
+  __LOG.Longitude,
+  __LOG.Altitude,
+  __LOG.elapsedTime
+  );
+
+  Serial.println(buffer);
+
+  // for(int i = 0 ; i < 256 ; i++){
+  //   if (buffer[i] == '\n') return;
+  //   str->print(buffer[i]);
+  // }
 }
 inline void __attribute__ ((always_inline)) WriteToExternalMem(){
   uint8_t buffer[sizeof(log_t)];
@@ -198,33 +244,43 @@ inline void __attribute__ ((always_inline)) WriteToExternalMem(){
     PORTA = buffer[i];
     // PORTA = (i % 2) == 0 ? 0x01 : 0x02;
     PORTL = 0x01;
-    delayMicroseconds(1);
+    // delayMicroseconds(1);
     PORTL = 0x00;
-    delayMicroseconds(1);
+    // delayMicroseconds(1);
   }
   PORTA = 0x00;
 }
-inline void __attribute__ ((always_inline))  WriteToSD(){
-  dataFile.print(__LOG.accelerationX);
-  dataFile.print(",");
-  dataFile.print(__LOG.accelerationY);
-  dataFile.print(",");
-  dataFile.print(__LOG.accelerationZ);
-  dataFile.print(",");
-  dataFile.print(__LOG.gyroX);
-  dataFile.print(",");
-  dataFile.print(__LOG.gyroY);
-  dataFile.print(",");
-  dataFile.print(__LOG.gyroZ);
-  dataFile.print(",");
-  dataFile.print(__LOG.BrakePressure);
-  dataFile.print(",");
-  dataFile.print(__LOG.ThrottlePositionSensor);
-  dataFile.print(",");
-  dataFile.print(__LOG.SteeringWheel);
-  dataFile.print(",");
-  dataFile.print(__LOG.CounterPulses);
-  dataFile.print(",");
+inline void __attribute__ ((always_inline)) VoidStream(){
+  return;
+}
+inline void __attribute__ ((always_inline)) WriteToSD(){
+  uint8_t buffer[sizeof(log_t)];
+  LogToBuffer(buffer);
+
+  for(int i = 0 ; i < sizeof(buffer); i++ ){
+    dataFile.print(buffer[i]);
+  }
+
+  // dataFile.print(__LOG.accelerationX);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.accelerationY);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.accelerationZ);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.gyroX);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.gyroY);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.gyroZ);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.BrakePressure);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.ThrottlePositionSensor);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.SteeringWheel);
+  // dataFile.print(",");
+  // dataFile.print(__LOG.CounterPulses);
+  // dataFile.print(",");
   // dataFile.print(__LOG.GroundSpeed);
   // dataFile.print(",");
   // dataFile.print(__LOG.Heading);
@@ -238,13 +294,56 @@ inline void __attribute__ ((always_inline))  WriteToSD(){
   // dataFile.println(__LOG.elapsedTime);    
 }
 
-
 void printPVTdata(UBX_NAV_PVT_data_t *ubxDataStruct){
-  __LOG.Latitude = ubxDataStruct->lat;
-  __LOG.Longitude = ubxDataStruct->lon;
-  __LOG.Altitude = ubxDataStruct->hMSL;
-  __LOG.GroundSpeed = myGNSS.getGroundSpeed();
-  __LOG.Heading = myGNSS.getHeading();
+
+  /*            DEBUG             */
+  // Serial.println(String("Latitude : ") + ubxDataStruct->lat);
+  // Serial.println(String("Longtitude : ") + ubxDataStruct->lon);
+  // Serial.println(String("MSL Height : ") + ubxDataStruct->hMSL);
+  // Serial.println(String("GroundSpeed : ") + myGNSS.getGroundSpeed());
+  // Serial.println(String("Heading : ") +  myGNSS.getHeading());
+
+
+  if (ubxDataStruct->fixType != 0){ 
+    __LOG.Latitude = ubxDataStruct->lat;
+    __LOG.Longitude = ubxDataStruct->lon;
+    __LOG.Altitude = ubxDataStruct->hMSL;
+    __LOG.GroundSpeed = myGNSS.getGroundSpeed();
+    __LOG.Heading = myGNSS.getHeading();
+
+    /*            DEBUG             */
+    // long latitude = myGNSS.getLatitude();
+    // Serial.print(F("Lat: "));
+    // Serial.print(latitude);
+
+    // long longitude = myGNSS.getLongitude();
+    // Serial.print(F(" Long: "));
+    // Serial.print(longitude);
+
+    // long speed = myGNSS.getGroundSpeed();
+    // Serial.print(F(" Speed: "));
+    // Serial.print(speed);
+    // Serial.print(F(" (mm/s)"));
+
+    // long heading = myGNSS.getHeading();
+    // Serial.print(F(" Heading: "));
+    // Serial.print(heading);
+    // Serial.print(F(" (degrees * 10^-5)"));
+
+    // int pDOP = myGNSS.getPDOP();
+    // Serial.print(F(" pDOP: "));
+    // Serial.println(pDOP / 100.0, 2); // Convert pDOP scaling from 0.01 to 1
+
+  } else {
+    __LOG.Latitude = 0xffffffff;
+    __LOG.Longitude = 0xffffffff;
+    __LOG.Altitude = 0xffffffff;
+    __LOG.GroundSpeed = 0xffffffff;
+    __LOG.Heading = 0xffffffff;
+    Serial.println("No fix ...");
+    delay(1000);
+
+  }
 }
 
 bool initGPS(SFE_UBLOX_GNSS *myGNSS) {
@@ -252,35 +351,37 @@ bool initGPS(SFE_UBLOX_GNSS *myGNSS) {
     // Disable NMEA
     0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x00,0x00,0x00,0x00,0x00,0x00,0x01,0x00,0x24, // GxGGA off
     0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x01,0x00,0x00,0x00,0x00,0x00,0x01,0x01,0x2B, // GxGLL off
-    // 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x02,0x00,0x00,0x00,0x00,0x00,0x01,0x02,0x32, // GxGSA off
+    0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x02,0x00,0x00,0x00,0x00,0x00,0x01,0x02,0x32, // GxGSA off
     0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x03,0x00,0x00,0x00,0x00,0x00,0x01,0x03,0x39, // GxGSV off
     0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x04,0x00,0x00,0x00,0x00,0x00,0x01,0x04,0x40, // GxRMC off
-    // 0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x05,0x00,0x00,0x00,0x00,0x00,0x01,0x05,0x47, // GxVTG off
-    0xB5,0x62,0x06,0x8A,0x0E,0x00,0x01,0x01,0x00,0x00,0xBB,0x00,0x91,0x20,0x01,0xB1,0x00,0x91,0x20,0x01,0x70,0xB6,
+    0xB5,0x62,0x06,0x01,0x08,0x00,0xF0,0x05,0x00,0x00,0x00,0x00,0x00,0x01,0x05,0x47, // GxVTG off
+    
     // Disable UBX
     0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x07,0x00,0x00,0x00,0x00,0x00,0x00,0x17,0xDC, //NAV-PVT off
     0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x12,0xB9, //NAV-POSLLH off
     0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x13,0xC0, //NAV-STATUS off
 
     // Enable UBX
-    // 0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x18,0xE1, //NAV-PVT on
+    0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x18,0xE1, //NAV-PVT on
     // 0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x02,0x00,0x01,0x00,0x00,0x00,0x00,0x13,0xBE, //NAV-POSLLH on
-    // 0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x03,0x00,0x01,0x00,0x00,0x00,0x00,0x14,0xC5, //NAV-STATUS on
+    // 0xB5,0x62,0x06,0x01,0x08,0x00,0x01,0x03,0x00,0x01,0x00,0x00,0x00,0x00,0x14,0xC5, //NAV-STATUS onInit
 
     // Rate
-    // 0xB5,0x62,0x06,0x08,0x06,0x00,0x64,0x00,0x01,0x00,0x01,0x00,0x7A,0x12, //(10Hz)
+    0xB5,0x62,0x06,0x08,0x06,0x00,0x64,0x00,0x01,0x00,0x01,0x00,0x7A,0x12, //(10Hz)
     // 0xB5,0x62,0x06,0x08,0x06,0x00,0xC8,0x00,0x01,0x00,0x01,0x00,0xDE,0x6A, //(5Hz)
-    0xB5,0x62,0x06,0x08,0x06,0x00,0xE8,0x03,0x01,0x00,0x01,0x00,0x01,0x39, //(1Hz)
+    // 0xB5,0x62,0x06,0x08,0x06,0x00,0xE8,0x03,0x01,0x00,0x01,0x00,0x01,0x39, //(1Hz)
 
-    // 0xB5,0x62,0x06,0x8A,0x0C,0x00,0x01,0x01,0x00,0x00,0x01,0x00,0x52,0x40,0x00,0xC2,0x01,0x00,0xF4,0xB1,
+    0xB5, 0x62, 0x06, 0x08, 0x13, 0x00, 0x01, 0x01, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x00, 0x02, 0x00, 0x92, 0x20, 0x07, 0x00, 0x91, 0x20, 0x07, 0xD8, 0x38, // Selects correct packages
+
+    0xB5,0x62,0x06,0x8A,0x0C,0x00,0x01,0x01,0x00,0x00,0x01,0x00,0x52,0x40,0x00,0xC2,0x01,0x00,0xF4,0xB1,
   };
 
   Serial1.begin(9600);
 
-  Stream *gps; 
+  Stream *gps;
   gps = &Serial1;
 
-  if (myGNSS->begin(*gps, 250, false) == false){
+  if (myGNSS->begin(*gps, 1100, false) == false){
     Serial.println(F("GPS not detected\n"));
     return false;
   }
@@ -302,6 +403,12 @@ bool initGPS(SFE_UBLOX_GNSS *myGNSS) {
   myGNSS->setAutoPVTcallbackPtr(&printPVTdata); // Enable automatic NAV PVT messages with callback to printPVTdata
 }
 
+void SerialBridge(HardwareSerial* src, HardwareSerial* dst){
+  if(src->available()) 
+    dst->write(src->read());
+  if (dst->available())
+    src->write(dst->read());
+}
 
 void MPU6050_init(){
   uint8_t devStatus;                                                          // return status after each device operation (0 = PASS, !0 = error)
@@ -345,8 +452,8 @@ void MPU6050_init(){
     Serial.println(F("\t\tPASS")); 
     IMU_present = true ;
     
-    // Serial.print(F(" |--Initializing DMP"));                                // load and configure the DMP
-    // devStatus = mpu.dmpInitialize();
+    Serial.print(F(" |--Initializing DMP"));                                // load and configure the DMP
+    devStatus = mpu.dmpInitialize();
   } else
     Serial.println(F("MPU6050 connection failed"));
   
@@ -358,13 +465,13 @@ void MPU6050_init(){
     mpu.CalibrateAccel(15);                                                   // Calibration Time: generate offsets and calibrate our MPU6050
     mpu.CalibrateGyro(15);
 
-    // Serial.print(F("\n |--Enabling DMP:"));
-    // mpu.setDMPEnabled(true);
-    // Serial.println(F("\t\t\tPASS")); 
+    Serial.print(F("\n |--Enabling DMP:"));
+    mpu.setDMPEnabled(true);
+    Serial.println(F("\t\t\tPASS")); 
 
     packetSize = mpu.dmpGetFIFOPacketSize();                                  // get expected DMP packet size for later comparison
 
-    // mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_4);                           // Set the accelerometer range to 4G
+    mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_4);                           // Set the accelerometer range to 4G
   } else {
     // ERROR!
     // 1 = initial memory load failed
@@ -452,11 +559,8 @@ inline void __attribute__ ((always_inline))  readVariousSensors(){
   ADCSRA |= (1 << ADSC);  
 }
 
-
 /**
  * @brief Initializes the ADC
- * 
- * @note The ADC is initialized with the prescaler set to 128 
  */
 inline void __attribute__ ((always_inline)) ADC_init(){
   ADMUX |= (1 << REFS0);                                                      // Set the reference voltage to AVCC
@@ -484,7 +588,6 @@ void ISR_stopRecording(){
   if(SD_present) dataFile.close();
 }
 
-
 /**
  * @brief When the compare match occurs in Timer1, the ISR sets the SAMPLE_WINDOW flag. When set, data  are sampled.
  * 
@@ -493,16 +596,7 @@ void ISR_stopRecording(){
  * 
  */
 ISR(TIMER1_COMPA_vect){
-  if (SAMPLE_WINDOW) {
-    VEC[ERREG_ARD] |= (1 << SAMPLING_RATE_LOW);
-    if (FreqMem++ >= 100){
-      __SAMPLING_RATE__ -= __SAMPLING_RATE__*0.05;
-      initTimers(__SAMPLING_RATE__);
-      SERIAL_LOGGIN = false;
-      Serial.println("Sampling rate decreased at : " +String(__SAMPLING_RATE__));
-    }
-  }
-  FreqMem -= (FreqMem > 0);
+  if (SAMPLE_WINDOW)  VEC[ERREG_ARD] |= (1 << SAMPLING_RATE_LOW);
   SAMPLE_WINDOW = true;
 }
 
@@ -532,12 +626,24 @@ ISR(ADC_vect){
   }
 }
 
+ISR(USART0_RX_vect){
+  char c = UDR0;
+  static char message[128];
+  static size_t len = 0;
+
+  if(c == '\n'){
+    message[len] = '\0';
+    SERCOMM_handler(message, len);
+    len = 0;
+  } else {
+    message[len++] = c;
+  }
+}
+
 void setup() {
   clearError();
 
-  Serial.println(String("Size of log : " + sizeof(log_t)));
-
-  Serial3.begin(250000);
+  Serial.println(String("Size of log : ") + sizeof(log_t));
 
   Serial.begin(BAUD_RATE);
   while (!Serial && SERIAL_LOGGIN);
@@ -550,6 +656,8 @@ void setup() {
 
     Serial.println("Baud rate must be larger than : " + String(__SAMPLING_RATE__ * sizeof(log_t)*8) + '\n');
   }
+
+  exportFunc = VoidStream;
 
   /* Pin declerations */
   Serial.print(F("Initializing pins "));
@@ -627,62 +735,12 @@ void loop()	{
   wdt_reset();                                                                // Reset the watchdog timer
 
   if(Serial.available()){
-    
-    String incomingMessage = Serial.readString();
-    Serial.println(String("Received : ") + incomingMessage);
-    // incomingMessage.setCharAt(incomingMessage.indexOf('\r'),'');
-
-    if (incomingMessage.equals("Start")){
-      Serial.println("Starting");
-      recording = true;
-      TIMSK1 |= (1 << OCIE1A);                                                    // Enable the Timer1 compare interrupt A
-      StartTime = millis();
-      digitalWrite(LED, HIGH);
-    } else if (incomingMessage.equals("Stop")){
-      recording = false;
-      digitalWrite(LED, LOW);
-      Serial.println("Stoping");
-    } else if (incomingMessage.equals("EnableSerial")){
-      SERIAL_LOGGIN = true;
-      Serial.println("Enabling Serial");
-    } else if (incomingMessage.equals("DisableSerial")){
-      SERIAL_LOGGIN = false;
-      Serial.println("Disabling Serial");
-    } else if (incomingMessage.equals("EnableParallel")){
-      PARALLEL_LOGGING = true;
-      Serial.println("Enabling Parallel interface");
-    } else if (incomingMessage.equals("DisableParallel")){
-      PARALLEL_LOGGING = false;
-      Serial.println("Disabling Parallel interface");
-    } else if (incomingMessage.equals("getSampleFrequency")){
-      Serial.println(String("Sample Frequency : ") + String(__SAMPLING_RATE__));
-    } else if (incomingMessage.startsWith("setSampleFrequency")){
-      __SAMPLING_RATE__ = incomingMessage.substring(13).toInt();
-      initTimers(__SAMPLING_RATE__);
-      Serial.println(String("Sample Frequency set to : ") + String(__SAMPLING_RATE__));
-    } else if (incomingMessage.equals("EnableSD")){
-      SD_LOGGIN = true;
-      Serial.println("Enabling SD card");
-    } else if (incomingMessage.equals("DisableSD")){
-      SD_LOGGIN = false;
-      Serial.println("Disabling SD card");
-    } else if (incomingMessage.equals("EnableWatchdog")){
-      wdt_enable(WDTO_8S);
-      Serial.println("Enabling Watchdog");
-    } else if (incomingMessage.equals("DisableWatchdog")){
-      wdt_disable();
-      Serial.println("Disabling Watchdog");
-    } else if (incomingMessage.equals("Reset")){
-      wdt_enable(WDTO_15MS);
-      Serial.println("Resetting");
-    } else if (incomingMessage.equals("EnableADCNoiseCanceler")){
-      ADCSRA |= (1 << ADATE);
-      Serial.println("Enabling ADC Noise Canceler");
-    } else if (incomingMessage.equals("DisableADCNoiseCanceler")){
-      ADCSRA &= ~(1 << ADATE);
-    }
+    Serial.readStringUntil('\n');
   }
 
+  if (SERIAL_BRIDGE){
+    SerialBridge(&Serial1,&Serial);
+  }
 
   // if (!IMU_present) return;
   // if (!SD_present) return;
@@ -697,9 +755,7 @@ void loop()	{
      
     readVariousSensors();
     
-    if(SERIAL_LOGGIN) SerialPrintLog();                                         // Print the data
-    if(SD_LOGGIN) WriteToSD();                                                  // Write the data to the SD card
-    if(PARALLEL_LOGGING) WriteToExternalMem();
+    exportFunc();                                                               // Export data
 
     __LOG.elapsedTime = micros() - StartTime;                                   // Calculate the elapsed time   
 
@@ -707,4 +763,9 @@ void loop()	{
   
     digitalWrite(46,LOW);
   }
+}
+
+// function that sends data through serial using ATMEGA2560 registers
+void MySerialPrint(char *str){
+  
 }
