@@ -1,19 +1,42 @@
-#define lib_path "~/Arduino/libraries"
-
 #include <avr/wdt.h>
+#include <avr/iom2560.h>
+
+#include <stdbool.h>
+
+#include <HardwareSerial.h>
+#include <Arduino.h>
+
+
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <u-blox_config_keys.h>
 #include <u-blox_structs.h>
 
-#include "I2Cdev.h"
+#include <I2Cdev.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
 
 #include "MPU6050_6Axis_MotionApps612.h"
-#include "lib/ErrorHandler.h"
-#include "lib/SERCOMM.h"
+
+#include "src/ErrorHandler/src/ErrorHandler.h"
+ErrorRegister ERROR_TIMER;
+ErrorRegister ERROR_ADC;
+ErrorRegister ERROR_IMU;
+ErrorRegister ERROR_GPS;
+ErrorRegister ERROR_SD;
+ErrorRegister ERROR_SERIAL;
+
+ErrorRegister errorRegisters[] = {
+    ERROR_TIMER,
+    ERROR_ADC,
+    ERROR_IMU,
+    ERROR_GPS,
+    ERROR_SD,
+    ERROR_SERIAL
+};
+
+ErrorHandler* errorHandler = new ErrorHandler(errorRegisters, 6);
 
 static bool SERIAL_LOGGIN = false;
 static bool SD_LOGGIN = false;
@@ -418,21 +441,20 @@ void MPU6050_init(){
   #endif
 
   Wire.beginTransmission(0x68);                                               // Start I2C communication with the MPU6050
-  VEC[ERREG_GN1] |= (Wire.endTransmission() << PROTOCOL_I2C_STUCK_BUS) ;       // Check if the MPU6050 is connected
-
-  if (VEC[ERREG_GN1] & (1 << PROTOCOL_I2C_STUCK_BUS) != 0){
-    Wire.end();
-    pinMode(21, OUTPUT); // pin 21 is SCL
-    digitalWrite(21, HIGH);
-    delayMicroseconds(10);
-    for (int i = 0; i < 10; i++){ // Send 10 clock pulses to free up I2C bus
-      digitalWrite(21, LOW);
-      delayMicroseconds(10);
-      digitalWrite(21, HIGH);
-      delayMicroseconds(10);
-    }
-    Wire.begin();
-  }
+  // VEC[ERREG_GN1] |= (Wire.endTransmission() << PROTOCOL_I2C_STUCK_BUS) ;       // Check if the MPU6050 is connected
+  // if (VEC[ERREG_GN1] & (1 << PROTOCOL_I2C_STUCK_BUS) != 0){
+  //   Wire.end();
+  //   pinMode(21, OUTPUT); // pin 21 is SCL
+  //   digitalWrite(21, HIGH);
+  //   delayMicroseconds(10);
+  //   for (int i = 0; i < 10; i++){ // Send 10 clock pulses to free up I2C bus
+  //     digitalWrite(21, LOW);
+  //     delayMicroseconds(10);
+  //     digitalWrite(21, HIGH);
+  //     delayMicroseconds(10);
+  //   }
+  //   Wire.begin();
+  // }
 
   Serial.print(F(" |--Initializing MPU6050"));
   mpu.initialize();
@@ -587,7 +609,7 @@ void ISR_stopRecording(){
  * 
  */
 ISR(TIMER1_COMPA_vect){
-  if (SAMPLE_WINDOW)  VEC[ERREG_ARD] |= (1 << SAMPLING_RATE_LOW);
+  // if (SAMPLE_WINDOW)  VEC[ERREG_ARD] |= (1 << SAMPLING_RATE_LOW);
   SAMPLE_WINDOW = true;
 }
 
@@ -617,25 +639,90 @@ ISR(ADC_vect){
   }
 }
 
-// ISR(USART0_RX_vect){
-//   char c = UDR0;
-//   static char message[128];
-//   static size_t len = 0;
 
-//   if(c == '\n'){
-//     message[len] = '\0';
-//     SERCOMM_handler(message, len);
-//     len = 0;
-//   } else {
-//     message[len++] = c;
-//   }
-// }
+ISR(USART0_RX_vect){
+
+}
+
+#include "src/SERCOMM/src/SERCOMM.h"
+
+char COMMAND_START[] = "Start";
+char COMMAND_STOP[] = "Stop";
+char COMMAND_RESET[] = "Reset";
+char COMMAND_SERIAL_ENABLE[] = "EnableSerial";
+char COMMAND_SERIAL_DISABLE[] = "DisableSerial";
+char COMMAND_PARALLEL_ENABLE[] = "EnableParallel";
+char COMMAND_PARALLEL_DISABLE[] = "DisableParallel";
+char COMMAND_FREQUENCY_GET[] = "getSamplingFrequency";
+char COMMAND_FREQUENCY_SET[] = "setSamplingFrequency";
+char COMMAND_SD_ENABLE[] = "EnableSD";
+char COMMAND_SD_DISABLE[] = "DisableSD";
+
+void FUNC_START_SAMPLING(){
+  recording = true;
+  TIMSK1 |= (1 << OCIE1A);                                                    // Enable the Timer1 compare interrupt A
+  StartTime = millis();
+
+  // digitalWrite(LED_BUILTIN, HIGH);
+  PORTB |=  (1 << PIN7);
+}
+void FUNC_STOP_SAMPLING(){
+  recording = false;
+
+  // digitalWrite(LED_BUILTIN, LOW);
+  PORTB &= !(1 << PIN7);
+}
+void FUNC_RESET(){
+  asm volatile ("  jmp 0");
+}
+void FUNC_ENABLE_SERIAL(){
+  exportFunc = SerialPrintLog;
+}
+void FUNC_DISABLE_SERIAL(){
+  exportFunc = NULL;
+}
+void FUNC_ENABLE_PARALLEL(){
+  // exportFunc = ExportParallel;
+}
+void FUNC_DISABLE_PARALLEL(){
+  exportFunc = NULL;
+}
+void FUNC_GET_FREQUENCY(){
+  Serial.print("Sampling Frequency: ");
+  Serial.println(TARGET_SAMPLING_RATE);
+}
+void FUNC_SET_FREQUENCY(const int argc, char *argv[]){
+  TARGET_SAMPLING_RATE = atoi(argv[0]);
+
+  initTimers(TARGET_SAMPLING_RATE);
+
+  Serial.print("Sampling Frequency set to: ");
+  Serial.println(TARGET_SAMPLING_RATE);
+}
+void FUNC_ENABLE_SD(){
+  exportFunc = WriteToSD;
+}
+void FUNC_DISABLE_SD(){
+  exportFunc = NULL;
+}
+
+command_t commands[] = {
+  initCommand(FUNC_START_SAMPLING, COMMAND_START, "Starting sampling"),
+  initCommand(FUNC_STOP_SAMPLING, COMMAND_STOP, "Stoping sampling"),
+  initCommand(FUNC_RESET, COMMAND_RESET, "Resetting the device"),
+  initCommand(FUNC_ENABLE_SERIAL, COMMAND_SERIAL_ENABLE, "Enabing serial communication"),
+  initCommand(FUNC_DISABLE_SERIAL, COMMAND_SERIAL_DISABLE, "Disabling serial communication"),
+  initCommand(FUNC_ENABLE_PARALLEL, COMMAND_PARALLEL_ENABLE, "Enabling parallel communication"),
+  initCommand(FUNC_DISABLE_PARALLEL, COMMAND_PARALLEL_DISABLE, "Disabling parallel communication"),
+  initCommand(FUNC_GET_FREQUENCY, COMMAND_FREQUENCY_GET, "Fetching sampling frequency"),
+  initCommand(FUNC_SET_FREQUENCY, COMMAND_FREQUENCY_SET, "Setting sampling frequency"),
+  initCommand(FUNC_ENABLE_SD, COMMAND_SD_ENABLE, "Enabling SD card"),
+  initCommand(FUNC_DISABLE_SD, COMMAND_SD_DISABLE, "Disabling SD card")
+};
+
+SERCOMM SerialCommander(commands, (sizeof(commands)/sizeof(commands[0])),30);
 
 void setup() {
-  clearError();
-
-  Serial.println(String("Size of log : ") + sizeof(log_t));
-
   Serial.begin(BAUD_RATE);
   while (!Serial && SERIAL_LOGGIN);
 
@@ -740,12 +827,12 @@ void loop()	{
     
     digitalWrite(46,HIGH);
     readGPS();			                                                          // Wait	for	VTG	messsage and print speed in	Serial.	 
-    if(Serial.available()){
+    // if(Serial.available()){
       
-      char buffer[256];
-      size_t size = Serial.readBytesUntil('\n', buffer , 256);
-      SERCOMM_handler(buffer);
-    }
+    //   char buffer[256];
+    //   size_t size = Serial.readBytesUntil('\n', buffer , 256);
+    //   SERCOMM_handler(buffer);
+    // }
     
     
     /*  Read data from	MPU6050 */
