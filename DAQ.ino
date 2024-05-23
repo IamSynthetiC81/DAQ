@@ -3,10 +3,9 @@
 
 #include <stdbool.h>
 
+#include "src/MySerial/Serial.h"
 #include <HardwareSerial.h>
 #include <Arduino.h>
-
-
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <u-blox_config_keys.h>
@@ -640,9 +639,9 @@ ISR(ADC_vect){
 }
 
 
-ISR(USART0_RX_vect){
+// ISR(USART0_RX_vect){
 
-}
+// }
 
 #include "src/SERCOMM/src/SERCOMM.h"
 
@@ -721,6 +720,8 @@ command_t commands[] = {
 };
 
 SERCOMM SerialCommander(commands, (sizeof(commands)/sizeof(commands[0])),30);
+MySerial srt(115200);
+
 
 void setup() {
   Serial.begin(BAUD_RATE);
