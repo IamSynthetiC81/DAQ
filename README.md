@@ -15,8 +15,8 @@ This project consists of the following :
 All of this runs on an ATMEGA2560 (currenty through the arduino bootloader) at a maximum rate of 1KSPS using the following features.
 
 1. Serial Boot-Screen -> Detects Errors
-2. Serial-Controlled during runtime with commands such as `Start`,`Stop`,`EnableSerialoutput` and `getFrequency` (**WIP**).
-3. Timer enforced sampling rate (On Timer2).
+2. SerialCommander -> Serial-Control during runtime with commands such as `Start`,`Stop`,`EnableSerialoutput` and `getFrequency` (**WIP**).
+3. Configurable Timer enforced sampling rate (On Timer2).
 4. Counter for Hall encoder (Counter 5).
 5. ADC Hardware-Level optimized configuration (Convertions no longer block).
 
@@ -28,4 +28,5 @@ processing time.
 
 1. Enable DMP parsing on MPU6050.
 2. 8-bit Parallel output option.
-3. More sophisticated Error-Handler. 
+3. More sophisticated Error-Handler.
+4. Overide Arduinos default serial ISRs 
