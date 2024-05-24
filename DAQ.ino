@@ -757,6 +757,8 @@ void setup() {
   // Serial.flush();
 }
 
+
+
 void loop()	{
   wdt_reset();                                                                // Reset the watchdog timer
 
@@ -764,6 +766,12 @@ void loop()	{
   // if (!SD_present) return;
   if	(recording)	{
     if (!SAMPLE_WINDOW) return;
+
+    if(Serial.available()){
+      char buffer[124];
+      int len = Serial.readBytesUntil('\n',buffer, 124);
+      SerialCommander.handler(buffer, len);
+    }
 
     digitalWrite(46,HIGH);
     readGPS();			                                                          // Wait	for	VTG	messsage and print speed in	Serial.	 
