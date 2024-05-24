@@ -1,38 +1,44 @@
-#ifndef SERIAL_H
-#define SERIAL_H
+#pragma once
 
+#include <stdint.h>
 #include <avr/io.h>
 
 #include "../CircularList/CircularList.h"
 
+extern CircularList<uint8_t> WriteBuffer;
+extern CircularList<uint8_t> ReadBuffer;
+
 class MySerial {
 public:
     MySerial(uint32_t baudRate);
-
     bool available();
 
     uint8_t read();
+    void print(const char* data);
+    void print(char data);
+    void print(uint8_t data);
+    void print(uint16_t data);
+    void print(uint32_t data);
+    void print(int8_t data);
+    void print(int16_t data);
+    void print(int32_t data);
+    void print(float data);
+    void print(double data);
 
-    void print(const char* str);
+    void println(const char* data);
+    void println(char data);
+    void println(uint8_t data);
+    void println(uint16_t data);
+    void println(uint32_t data);
+    void println(int8_t data);
+    void println(int16_t data);
+    void println(int32_t data);
+    void println(float data);
+    void println(double data);
 
-    void println(const char* str);
+  
+    int ReadBufferToChar(char* buffer);
 
-    void ISR_RX();
-
-    void ISR_UDRE();
-
-    void ISR_TX();
-
-    void ISR_FE();
-
-
-
-    private:
-        const int buffer_size = 128;
-        CircularList<uint8_t> WriteBuffer = CircularList<uint8_t>(buffer_size);
-        CircularList<uint8_t> ReadBuffer = CircularList<uint8_t>(buffer_size);
-
-        void WriteFromBuffer();
+private:
+    void WriteFromBuffer();
 };
-
-#endif // SERIAL_H

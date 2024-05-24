@@ -45,6 +45,8 @@ static bool SERIAL_BRIDGE = false;
 uint16_t TARGET_SAMPLING_RATE = 500;
 #define BAUD_RATE 250000
 
+static const MySerial srt(BAUD_RATE);
+
 /*  Button Declerations   */
 #define PIN_START_BUTTON 2
 #define PIN_STOP_BUTTON 3
@@ -85,25 +87,6 @@ static HardwareSerial *DBG_SERIAL = &Serial;
 
 unsigned long __SAMPLING_RATE__ = TARGET_SAMPLING_RATE;
 
-/**
- * @brief Structure to store the data
- * 
- * @param accelerationX Acceleration in X-axis. Divide according to the set max acceleration and multiply by G=9.81 to get the acceleration in m/s^2
- * @param accelerationY Acceleration in Y-axis. Divide according to the set max acceleration and multiply by G=9.81 to get the acceleration in m/s^2
- * @param accelerationZ Acceleration in Z-axis. Divide according to the set max acceleration and multiply by G=9.81 to get the acceleration in m/s^2
- * @param gyroX Gyroscope reading in X-axis. Multiply by 180/pi to get the value in degrees
- * @param gyroY Gyroscope reading in Y-axis. Multiply by 180/pi to get the value in degrees
- * @param gyroZ Gyroscope reading in Z-axis. Multiply by 180/pi to get the value in degrees
- * @param brakePressure Brake Pressure in bar ???
- * @param tps Throttle Position Sensor value. Divide by 1023 to get the value between 0 and 1
- * @param potValue Potentiometer value. Divide by 1023 to get the value between -0.5 and 0.5
- * @param SpeedGPS Speed from GPS in m/s
- * @param GPS_Valid GPS Validity
- * @param elapsedTime Elapsed time in milliseconds
- * 
- * @note The values are stored in the structure and can be printed using SerialPrintLog() function* 
- * @see SerialPrintLog() 
- */
 typedef	struct information{
   int16_t accelerationX;
   int16_t accelerationY;
@@ -124,84 +107,80 @@ typedef	struct information{
   long elapsedTime;
 } log_t;
 
-/**
- * @brief LOG structure to store the data
- */
 log_t __LOG;
 
 void LogToBuffer(uint8_t* buffer){
-  buffer[0] = __LOG.accelerationX;
-  buffer[1] = __LOG.accelerationX >> 8;
-  buffer[2]=  __LOG.accelerationY;
-  buffer[3]=  __LOG.accelerationY >> 8;
-  buffer[4] = __LOG.accelerationZ;
-  buffer[5] = __LOG.accelerationZ >> 8;
-  buffer[6] = __LOG.gyroX;
-  buffer[7] = __LOG.gyroX >> 8;
-  buffer[8] = __LOG.gyroY;
-  buffer[9] = __LOG.gyroY >> 8;
-  buffer[10] = __LOG.gyroZ;
-  buffer[11] = __LOG.gyroZ >> 8;
-  buffer[12] = __LOG.Vref;
-  buffer[13] = __LOG.Vref >> 8;
-  buffer[14] = __LOG.BrakePressure;
-  buffer[15] = __LOG.BrakePressure >> 8;
-  buffer[16] = __LOG.ThrottlePositionSensor;
-  buffer[17] = __LOG.ThrottlePositionSensor >> 8;
-  buffer[18] = __LOG.SteeringWheel;
-  buffer[19]=  __LOG.SteeringWheel >> 8;
-  buffer[20]=  __LOG.CounterPulses;
-  buffer[21]=  __LOG.CounterPulses >> 8;
-  buffer[22]=  __LOG.GroundSpeed;
-  buffer[23]=  __LOG.GroundSpeed >> 8;
-  buffer[24]=  __LOG.GroundSpeed >> 16;
-  buffer[25]=  __LOG.GroundSpeed >> 24;
-  buffer[26]=  __LOG.GroundSpeed >> 32;
-  buffer[27]=  __LOG.GroundSpeed >> 40;
-  buffer[28]=  __LOG.GroundSpeed >> 48;
-  buffer[29]=  __LOG.GroundSpeed >> 56;
-  buffer[30]=  __LOG.Heading;
-  buffer[31]=  __LOG.Heading >> 8;
-  buffer[32]=  __LOG.Heading >> 16;
-  buffer[33]=  __LOG.Heading >> 24;
-  buffer[34]=  __LOG.Heading >> 32;
-  buffer[35]=  __LOG.Heading >> 40;
-  buffer[36]=  __LOG.Heading >> 48;
-  buffer[37]=  __LOG.Heading >> 56;
-  buffer[38]=  __LOG.Latitude;
-  buffer[39]=  __LOG.Latitude >> 8;
-  buffer[40]=  __LOG.Latitude >> 16;
-  buffer[41]=  __LOG.Latitude >> 24;
-  buffer[42]=  __LOG.Latitude >> 32;
-  buffer[43]=  __LOG.Latitude >> 40;
-  buffer[44]=  __LOG.Latitude >> 48;
-  buffer[45]=  __LOG.Latitude >> 56;
-  buffer[46]=  __LOG.Longitude;
-  buffer[47]=  __LOG.Longitude >> 8;
-  buffer[48]=  __LOG.Longitude >> 16;
-  buffer[49]=  __LOG.Longitude >> 24;
-  buffer[50]=  __LOG.Longitude >> 32;
-  buffer[51]=  __LOG.Longitude >> 40;
-  buffer[52]=  __LOG.Longitude >> 48;
-  buffer[53]=  __LOG.Longitude >> 56;
-  buffer[54]=  __LOG.Altitude;
-  buffer[55]=  __LOG.Altitude >> 8;
-  buffer[56]=  __LOG.Altitude >> 16;
-  buffer[57]=  __LOG.Altitude >> 24;
-  buffer[58]=  __LOG.Altitude >> 32;
-  buffer[59]=  __LOG.Altitude >> 40;
-  buffer[60]=  __LOG.Altitude >> 48;
-  buffer[61]=  __LOG.Altitude >> 56;
-  buffer[62]=  __LOG.elapsedTime;
-  buffer[63]=  __LOG.elapsedTime >> 8;
-  buffer[64]=  __LOG.elapsedTime >> 16;
-  buffer[65]=  __LOG.elapsedTime >> 24;
-  buffer[66]=  __LOG.elapsedTime >> 32;
-  buffer[67]=  __LOG.elapsedTime >> 40;
-  buffer[68]=  __LOG.elapsedTime >> 48;
-  buffer[69]=  __LOG.elapsedTime >> 56;
+  buffer[0] =  (uint8_t)((__LOG.accelerationX) & 0xff);
+  buffer[1] =  (uint8_t)((__LOG.accelerationX >> 8) & 0xff);
+  buffer[2]=   (uint8_t)((__LOG.accelerationY) & 0xff);
+  buffer[3]=   (uint8_t)((__LOG.accelerationY >> 8) & 0xff);
+  buffer[4] =  (uint8_t)((__LOG.accelerationZ) & 0xff);
+  buffer[5] =  (uint8_t)((__LOG.accelerationZ >> 8) & 0xff);
+  buffer[6] =  (uint8_t)((__LOG.gyroX) & 0xff);
+  buffer[7] =  (uint8_t)((__LOG.gyroX >> 8) & 0xff);
+  buffer[8] =  (uint8_t)((__LOG.gyroY) & 0xff);
+  buffer[9] =  (uint8_t)((__LOG.gyroY >> 8) & 0xff);
+  buffer[10] = (uint8_t)((__LOG.gyroZ) & 0xff);
+  buffer[11] = (uint8_t)((__LOG.gyroZ >> 8) & 0xff);
+  buffer[12] = (uint8_t)((__LOG.Vref) & 0xff);
+  buffer[13] = (uint8_t)((__LOG.Vref >> 8) & 0xff);
+  buffer[14] = (uint8_t)((__LOG.BrakePressure) & 0xff);
+  buffer[15] = (uint8_t)((__LOG.BrakePressure >> 8) & 0xff);
+  buffer[16] = (uint8_t)((__LOG.ThrottlePositionSensor) & 0xff);
+  buffer[17] = (uint8_t)((__LOG.ThrottlePositionSensor >> 8) & 0xff);
+  buffer[18] = (uint8_t)((__LOG.SteeringWheel) & 0xff);
+  buffer[19]=  (uint8_t)((__LOG.SteeringWheel >> 8) & 0xff);
+  buffer[20]=  (uint8_t)((__LOG.CounterPulses) & 0xff);
+  buffer[21]=  (uint8_t)((__LOG.CounterPulses >> 8) & 0xff);
+  buffer[22]=  (uint8_t)((__LOG.GroundSpeed) & 0xff);
+  buffer[23]=  (uint8_t)((__LOG.GroundSpeed >> 8) & 0xff);
+  buffer[24]=  (uint8_t)((__LOG.GroundSpeed >> 16) & 0xff);
+  buffer[25]=  (uint8_t)((__LOG.GroundSpeed >> 24) & 0xff);
+  buffer[26]=  (uint8_t)((__LOG.GroundSpeed >> 32) & 0xff);
+  buffer[27]=  (uint8_t)((__LOG.GroundSpeed >> 40) & 0xff);
+  buffer[28]=  (uint8_t)((__LOG.GroundSpeed >> 48) & 0xff);
+  buffer[29]=  (uint8_t)((__LOG.GroundSpeed >> 56) & 0xff);
+  buffer[30]=  (uint8_t)((__LOG.Heading) & 0xff);
+  buffer[31]=  (uint8_t)((__LOG.Heading >> 8) & 0xff);
+  buffer[32]=  (uint8_t)((__LOG.Heading >> 16) & 0xff);
+  buffer[33]=  (uint8_t)((__LOG.Heading >> 24) & 0xff);
+  buffer[34]=  (uint8_t)((__LOG.Heading >> 32) & 0xff);
+  buffer[35]=  (uint8_t)((__LOG.Heading >> 40) & 0xff);
+  buffer[36]=  (uint8_t)((__LOG.Heading >> 48) & 0xff);
+  buffer[37]=  (uint8_t)((__LOG.Heading >> 56) & 0xff);
+  buffer[38]=  (uint8_t)((__LOG.Latitude) & 0xff);
+  buffer[39]=  (uint8_t)((__LOG.Latitude >> 8) & 0xff);
+  buffer[40]=  (uint8_t)((__LOG.Latitude >> 16) & 0xff);
+  buffer[41]=  (uint8_t)((__LOG.Latitude >> 24) & 0xff);
+  buffer[42]=  (uint8_t)((__LOG.Latitude >> 32) & 0xff);
+  buffer[43]=  (uint8_t)((__LOG.Latitude >> 40) & 0xff);
+  buffer[44]=  (uint8_t)((__LOG.Latitude >> 48) & 0xff);
+  buffer[45]=  (uint8_t)((__LOG.Latitude >> 56) & 0xff);
+  buffer[46]=  (uint8_t)((__LOG.Longitude) & 0xff);
+  buffer[47]=  (uint8_t)((__LOG.Longitude >> 8) & 0xff);
+  buffer[48]=  (uint8_t)((__LOG.Longitude >> 16) & 0xff);
+  buffer[49]=  (uint8_t)((__LOG.Longitude >> 24) & 0xff);
+  buffer[50]=  (uint8_t)((__LOG.Longitude >> 32) & 0xff);
+  buffer[51]=  (uint8_t)((__LOG.Longitude >> 40) & 0xff);
+  buffer[52]=  (uint8_t)((__LOG.Longitude >> 48) & 0xff);
+  buffer[53]=  (uint8_t)((__LOG.Longitude >> 56) & 0xff);
+  buffer[54]=  (uint8_t)((__LOG.Altitude) & 0xff);
+  buffer[55]=  (uint8_t)((__LOG.Altitude >> 8) & 0xff);
+  buffer[56]=  (uint8_t)((__LOG.Altitude >> 16) & 0xff);
+  buffer[57]=  (uint8_t)((__LOG.Altitude >> 24) & 0xff);
+  buffer[58]=  (uint8_t)((__LOG.Altitude >> 32) & 0xff);
+  buffer[59]=  (uint8_t)((__LOG.Altitude >> 40) & 0xff);
+  buffer[60]=  (uint8_t)((__LOG.Altitude >> 48) & 0xff);
+  buffer[61]=  (uint8_t)((__LOG.Altitude >> 56) & 0xff);
+  buffer[62]=  (uint8_t)((__LOG.elapsedTime) & 0xff);
+  buffer[63]=  (uint8_t)((__LOG.elapsedTime >> 8) & 0xff);
+  buffer[64]=  (uint8_t)((__LOG.elapsedTime >> 16) & 0xff);
+  buffer[65]=  (uint8_t)((__LOG.elapsedTime >> 24) & 0xff);
+  buffer[66]=  (uint8_t)((__LOG.elapsedTime >> 32) & 0xff);
+  buffer[67]=  (uint8_t)((__LOG.elapsedTime >> 40) & 0xff);
+  buffer[68]=  (uint8_t)((__LOG.elapsedTime >> 48) & 0xff);
+  buffer[69]=  (uint8_t)((__LOG.elapsedTime >> 56) & 0xff);
 }
-
 void LogToCharArray(char *buffer){
 
   sprintf(buffer, "%d | %d | %d | %d | %d | %d\n",__LOG.accelerationX,__LOG.accelerationY,__LOG.accelerationZ,__LOG.gyroX,__LOG.gyroY,__LOG.gyroZ);
@@ -225,7 +204,6 @@ void LogToCharArray(char *buffer){
 }
 
 inline void __attribute__ ((always_inline)) (*exportFunc)() = NULL;
-
 inline void __attribute__ ((always_inline)) SerialPrintLog(){
   char buffer[512];
   sprintf(buffer, "%d | %d | %d | %d | %d | %d | %u | %u | %u | %u | %u | %ld | %ld | %ld | %ld | %ld | %ld \n\0",
@@ -247,7 +225,7 @@ inline void __attribute__ ((always_inline)) SerialPrintLog(){
   __LOG.elapsedTime
   );
 
-  Serial.println(buffer);
+  srt.println(buffer);
 }
 inline void __attribute__ ((always_inline)) WriteToExternalMem(){
   uint8_t buffer[sizeof(log_t)];
@@ -262,9 +240,6 @@ inline void __attribute__ ((always_inline)) WriteToExternalMem(){
     // delayMicroseconds(1);
   }
   PORTA = 0x00;
-}
-inline void __attribute__ ((always_inline)) VoidStream(){
-  return;
 }
 inline void __attribute__ ((always_inline)) WriteToSD(){
   uint8_t buffer[sizeof(log_t)];
@@ -353,7 +328,7 @@ void printPVTdata(UBX_NAV_PVT_data_t *ubxDataStruct){
     __LOG.Altitude = 0xffffffff;
     __LOG.GroundSpeed = 0xffffffff;
     __LOG.Heading = 0xffffffff;
-    Serial.println("No fix ...");
+    srt.println("No fix ...");
     delay(1000);
 
   }
@@ -395,7 +370,7 @@ bool initGPS(SFE_UBLOX_GNSS *myGNSS) {
   gps = &Serial1;
 
   if (myGNSS->begin(*gps, 1100, false) == false){
-    Serial.println(F("GPS not detected\n"));
+    srt.println("GPS not detected\n");
     return false;
   }
 
@@ -416,27 +391,20 @@ bool initGPS(SFE_UBLOX_GNSS *myGNSS) {
   myGNSS->setAutoPVTcallbackPtr(&printPVTdata); // Enable automatic NAV PVT messages with callback to printPVTdata
 }
 
-void SerialBridge(HardwareSerial* src, HardwareSerial* dst){
-  if(src->available()) 
-    dst->write(src->read());
-  if (dst->available())
-    src->write(dst->read());
-}
-
 void MPU6050_init(){
   uint8_t devStatus;                                                          // return status after each device operation (0 = PASS, !0 = error)
   uint16_t packetSize;                                                        // expected DMP packet size (default is 42 bytes)
 
   wdt_reset();
 
-  Serial.print(F("Initializing I2C Drivers :"));
+  srt.print("Initializing I2C Drivers :");
   #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE                            // join I2C bus (I2Cdev library doesn't do this automatically)
     Wire.begin();
     Wire.setClock(400000);                                                    // 400kHz I2C clock. Comment this line if code is not compiling
-    Serial.println(F("\t\tPASS"));
+    srt.println("\t\tPASS");
   #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
     Fastwire::setup(400, true);
-    Serial.println(F("\t\tPASS"));
+    srt.println("\t\tPASS");
   #endif
 
   Wire.beginTransmission(0x68);                                               // Start I2C communication with the MPU6050
@@ -455,31 +423,31 @@ void MPU6050_init(){
   //   Wire.begin();
   // }
 
-  Serial.print(F(" |--Initializing MPU6050"));
+  srt.print(" |--Initializing MPU6050");
   mpu.initialize();
-  Serial.println(F("\t\tPASS"));
+  srt.println("\t\tPASS");
 
-  Serial.print(F(" |--Testing device connection:"));                         // verify connection
+  srt.print(" |--Testing device connection:");                         // verify connection
   if (mpu.testConnection()){
-    Serial.println(F("\t\tPASS")); 
+    srt.println("\t\tPASS"); 
     IMU_present = true ;
     
-    Serial.print(F(" |--Initializing DMP"));                                // load and configure the DMP
+    srt.print(" |--Initializing DMP");                                // load and configure the DMP
     devStatus = mpu.dmpInitialize();
   } else
-    Serial.println(F("MPU6050 connection failed"));
+    srt.println("MPU6050 connection failed");
   
   if (devStatus == 0) {                                                       // make sure it worked (returns 0 if so)
 
     wdt_reset();
 
-    Serial.println(F(" |--Calibrating:"));                                    // Caibrate
+    srt.println(" |--Calibrating:");                                    // Caibrate
     mpu.CalibrateAccel(15);                                                   // Calibration Time: generate offsets and calibrate our MPU6050
     mpu.CalibrateGyro(15);
 
-    Serial.print(F("\n |--Enabling DMP:"));
+    srt.print("\n |--Enabling DMP:");
     mpu.setDMPEnabled(true);
-    Serial.println(F("\t\t\tPASS")); 
+    srt.println("\t\t\tPASS"); 
 
     packetSize = mpu.dmpGetFIFOPacketSize();                                  // get expected DMP packet size for later comparison
 
@@ -489,9 +457,9 @@ void MPU6050_init(){
     // 1 = initial memory load failed
     // 2 = DMP configuration updates failed
     // (if it's going to break, usually the code will be 1)
-    Serial.print(F("DMP Initialization failed (code "));
-    Serial.print(devStatus);
-    Serial.println(F(")"));
+    srt.print("DMP Initialization failed (code ");
+    srt.print(devStatus);
+    srt.println(")");
   }
 }
 bool initTimers(uint16_t  freq){
@@ -546,14 +514,6 @@ inline void __attribute__ ((always_inline))  readGPS(){
   myGNSS.checkCallbacks();  // Check if any callbacks are waiting to be processed.
 }
 
-/**
- * @brief Reads the data from the various sensors and stores it in the __LOG structure.
- * 
- * @note The data is stored in the __LOG structure and can be printed using SerialPrintLog() function
- * @see SerialPrintLog()
- * @see CalibrateSupplyVoltage()
- * 
-*/
 inline void __attribute__ ((always_inline))  readVariousSensors(){
   /* Math functions that need to b calculated for each sensor are the following :
    * brakePressure = (ReadVoltage(A2)-0.5)*11.5;                           
@@ -571,9 +531,6 @@ inline void __attribute__ ((always_inline))  readVariousSensors(){
   ADCSRA |= (1 << ADSC);  
 }
 
-/**
- * @brief Initializes the ADC
- */
 inline void __attribute__ ((always_inline)) ADC_init(){
   ADMUX |= (1 << REFS0);                                                      // Set the reference voltage to AVCC
   
@@ -600,13 +557,6 @@ void ISR_stopRecording(){
   if(SD_present) dataFile.close();
 }
 
-/**
- * @brief When the compare match occurs in Timer1, the ISR sets the SAMPLE_WINDOW flag. When set, data  are sampled.
- * 
- * @note This is the interrupt service routine for the Timer1 compare match
- * @see initTimers()
- * 
- */
 ISR(TIMER1_COMPA_vect){
   // if (SAMPLE_WINDOW)  VEC[ERREG_ARD] |= (1 << SAMPLING_RATE_LOW);
   SAMPLE_WINDOW = true;
@@ -638,9 +588,12 @@ ISR(ADC_vect){
   }
 }
 
+// ISR(USART1_RX_vect){
+//   srt.ISR_RX;
+// }
 
-// ISR(USART0_RX_vect){
-
+// ISR(USART1_TX_vect){
+//   str.ISR_TX;
 // }
 
 #include "src/SERCOMM/src/SERCOMM.h"
@@ -657,7 +610,7 @@ char COMMAND_FREQUENCY_SET[] = "setSamplingFrequency";
 char COMMAND_SD_ENABLE[] = "EnableSD";
 char COMMAND_SD_DISABLE[] = "DisableSD";
 
-void FUNC_START_SAMPLING(){
+void FUNC_START_SAMPLING(int argc, int argv){
   recording = true;
   TIMSK1 |= (1 << OCIE1A);                                                    // Enable the Timer1 compare interrupt A
   StartTime = millis();
@@ -665,43 +618,43 @@ void FUNC_START_SAMPLING(){
   // digitalWrite(LED_BUILTIN, HIGH);
   PORTB |=  (1 << PIN7);
 }
-void FUNC_STOP_SAMPLING(){
+void FUNC_STOP_SAMPLING(int argc, int argv){
   recording = false;
 
   // digitalWrite(LED_BUILTIN, LOW);
   PORTB &= !(1 << PIN7);
 }
-void FUNC_RESET(){
+void FUNC_RESET(int argc, int argv){
   asm volatile ("  jmp 0");
 }
-void FUNC_ENABLE_SERIAL(){
+void FUNC_ENABLE_SERIAL(int argc, int argv){
   exportFunc = SerialPrintLog;
 }
-void FUNC_DISABLE_SERIAL(){
+void FUNC_DISABLE_SERIAL(int argc, int argv){
   exportFunc = NULL;
 }
-void FUNC_ENABLE_PARALLEL(){
+void FUNC_ENABLE_PARALLEL(int argc, int argv){
   // exportFunc = ExportParallel;
 }
-void FUNC_DISABLE_PARALLEL(){
+void FUNC_DISABLE_PARALLEL(int argc, int argv){
   exportFunc = NULL;
 }
-void FUNC_GET_FREQUENCY(){
-  Serial.print("Sampling Frequency: ");
-  Serial.println(TARGET_SAMPLING_RATE);
+void FUNC_GET_FREQUENCY(int argc, int argv){
+  srt.print("Sampling Frequency: ");
+  srt.println(TARGET_SAMPLING_RATE);
 }
 void FUNC_SET_FREQUENCY(const int argc, char *argv[]){
   TARGET_SAMPLING_RATE = atoi(argv[0]);
 
   initTimers(TARGET_SAMPLING_RATE);
 
-  Serial.print("Sampling Frequency set to: ");
-  Serial.println(TARGET_SAMPLING_RATE);
+  srt.print("Sampling Frequency set to: ");
+  srt.println(TARGET_SAMPLING_RATE);
 }
-void FUNC_ENABLE_SD(){
+void FUNC_ENABLE_SD(int argc, int argv){
   exportFunc = WriteToSD;
 }
-void FUNC_DISABLE_SD(){
+void FUNC_DISABLE_SD(int argc, int argv){
   exportFunc = NULL;
 }
 
@@ -720,26 +673,24 @@ command_t commands[] = {
 };
 
 SERCOMM SerialCommander(commands, (sizeof(commands)/sizeof(commands[0])),30);
-MySerial srt(115200);
-
 
 void setup() {
-  Serial.begin(BAUD_RATE);
-  while (!Serial && SERIAL_LOGGIN);
+  // Serial.begin(BAUD_RATE);
 
-  Serial.println(F("\n\t!!-Initializing the DAQ System-!!"));
+  srt.println("\n\t!!-Initializing the DAQ System-!!");
+  srt.println("\n\t!!-Initializing the DAQ System-!!");
 
   if (TARGET_SAMPLING_RATE * sizeof(log_t) > BAUD_RATE/10 ){
-    Serial.println(F("The baud rate is too low for the sampling rate"));
-    Serial.println(F("Increase the baud rate or decrease the sampling rate"));
+    srt.println("The baud rate is too low for the sampling rate");
+    srt.println("Increase the baud rate or decrease the sampling rate");
 
-    Serial.println("Baud rate must be larger than : " + String(__SAMPLING_RATE__ * sizeof(log_t)*8) + '\n');
+    // srt.println("Baud rate must be larger than : " + String(__SAMPLING_RATE__ * sizeof(log_t)*8) + '\n');
   }
 
-  exportFunc = VoidStream;
+  exportFunc = NULL;
 
   /* Pin declerations */
-  Serial.print(F("Initializing pins "));
+  srt.print("Initializing pins ");
   pinMode(PIN_START_BUTTON, INPUT_PULLUP);
   pinMode(PIN_STOP_BUTTON, INPUT_PULLUP);
   pinMode(PIN_RESET_BUTTON, INPUT_PULLUP);
@@ -748,78 +699,66 @@ void setup() {
   digitalWrite(LED,HIGH);
   delay(500);
   digitalWrite(LED,LOW);
-  Serial.println(F("\t\t\tPASS"));
+  srt.println("\t\t\tPASS");
 
-  Serial.print(F("Initializing pins "));
+  srt.print("Initializing pins ");
   ADC_init();
-  Serial.println(F("\t\t\tPASS"));
+  srt.println("\t\t\tPASS");
 
-  Serial.print(F("Initializing Watchdog :"));
+  srt.print("Initializing Watchdog :");
   wdt_enable(WDTO_8S);                                                        // Enable watchdog with a 4-second timeout
-  Serial.println(F("\t\t\tPASS"));
+  srt.println("\t\t\tPASS");
 
-  Serial.println(F("Initializing IMU :"));
+  srt.println("Initializing IMU :");
   MPU6050_init();                                                             // Initialize the MPU6050
 
   wdt_reset();                                                                // Reset the watchdog timer
 
-  Serial.print(F("\nInitializing SD card :"));
+  srt.print("\nInitializing SD card :");
   if (!SD.begin(53) && SD_LOGGIN) {                                           // SD card initialization
     // ERROR = true;
     // ErrorFlag = 0x05;
-    Serial.println(F("SD initialization failed!\n\tFix and reboot to contrinue\n"));
+    srt.println("SD initialization failed!\n\tFix and reboot to contrinue\n");
     return;
   }
 
   wdt_reset();                                                                // Reset the watchdog timer
 
   dataFile = SD.open("data.txt", FILE_WRITE);                                 // Open the data file
-  dataFile ? Serial.println(F("\t\t\tPASS")) : Serial.println(F("\t\t\t|--FAIL--|"));
+  dataFile ? srt.println("\t\t\tPASS") : srt.println("\t\t\t|--FAIL--|");
 
   wdt_reset();                                                                // Reset the watchdog timer
 
-  Serial.print(F("Initializing GPS :"));
+  srt.print("Initializing GPS :");
   initGPS(&myGNSS);
-  Serial.println("\t\t\tPASS");
+  srt.println("\t\t\tPASS");
 
   wdt_reset();                                                                // Reset the watchdog timer
 
-  Serial.print(F("Setting up the interrupts :"));
+  srt.print("Setting up the interrupts :");
   attachInterrupt(digitalPinToInterrupt(PIN_START_BUTTON), ISR_startRecording, FALLING);
   attachInterrupt(digitalPinToInterrupt(PIN_STOP_BUTTON), ISR_stopRecording, FALLING);
-  Serial.println(F("\t\tPASS "));
+  srt.println("\t\tPASS ");
 
   wdt_reset();                                                                // Reset the watchdog timer
 
-  Serial.print(F("Initializing Timers :"));
+  srt.print("Initializing Timers :");
   if (initTimers(__SAMPLING_RATE__)){
-    Serial.println(F("\t\t\tPASS"));
+    srt.println("\t\t\tPASS");
   } else {
     // ERROR = true;
     // ErrorFlag = 0x01;
-    Serial.println(F("\t\t|--FAIL--|"));
+    srt.println("\t\t|--FAIL--|");
   }
-
-
-
-  // while(ERROR){};
 
   wdt_reset();                                                                // Reset the watchdog timer
 
-  Serial.println(F("\n\t!!-Initialization complete-!!"));
-  Serial.flush();
+  srt.println("\n\t!!-Initialization complete-!!");
+  // srt.flush();
 }
 
 void loop()	{
   wdt_reset();                                                                // Reset the watchdog timer
-
-  if(Serial.available()){
-    Serial.readStringUntil('\n');
-  }
-
-  if (SERIAL_BRIDGE){
-    SerialBridge(&Serial1,&Serial);
-  }
 
   // if (!IMU_present) return;
   // if (!SD_present) return;
@@ -828,6 +767,9 @@ void loop()	{
     
     digitalWrite(46,HIGH);
     readGPS();			                                                          // Wait	for	VTG	messsage and print speed in	Serial.	 
+
+    // srt.print(const char *str)
+
     // if(Serial.available()){
       
     //   char buffer[256];
@@ -849,9 +791,4 @@ void loop()	{
   
     digitalWrite(46,LOW);
   }
-}
-
-// function that sends data through serial using ATMEGA2560 registers
-void MySerialPrint(char *str){
-  
 }
