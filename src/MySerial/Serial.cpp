@@ -5,21 +5,16 @@
 CircularList<uint8_t> WriteBuffer(128);
 CircularList<uint8_t> ReadBuffer(128);
 
+volatile bool newLine = false;
+
 MySerial::MySerial(uint32_t baudRate){
     // Set baud rate
     uint16_t ubrr = F_CPU / 16 / baudRate - 1;
     UBRR0H = (ubrr >> 8);
     UBRR0L = ubrr;
 
-    // Enable receiver and transmitter
-    UCSR0B = (1 << RXEN0) | (1 << TXEN0);
-
-    // Set frame format: 8 data bits, 1 stop bit
-    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
-
-    // Enable RX complete interrupt
-    UCSR0B |= (1 << RXCIE0);
-
+    UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);                   // Enable receiver, transmitter, and RX interrupt
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);                                 // Set frame format: 8 data bits, 1 stop bit
 }
 
 void MySerial::print(const char* data) {
@@ -232,19 +227,6 @@ uint8_t MySerial::read(){
     return UDR0;
 }
 
-// void ISR_RX(){
-//     ReadBuffer.push(UDR0);
-// }
-
-// void ISR_TX(){
-//     if (WriteBuffer.getSize() > 0) {
-//         UDR0 = WriteBuffer.pop();
-//     } else {
-//         // Disable TX complete interrupt
-//         UCSR0B &= ~(1 << TXCIE0);
-//     }
-// }
-
 void MySerial::WriteFromBuffer(){
     if (WriteBuffer.getSize() > 0) {
         UDR0 = WriteBuffer.pop();
@@ -256,15 +238,23 @@ void MySerial::WriteFromBuffer(){
 
 
 
-ISR(USART_RX_vect) {
-    ReadBuffer.push(UDR0);
-}
+// ISR(USART0_RX_vect) {
+//     if(UDR0 == '\r')                                                // Check if received data is a carriage return    
+//         ReadBuffer.push('\n');                                      // Push newline character to buffer
+//     else
+//         ReadBuffer.push(UDR0);                                      // Push received data to buffer
 
-ISR(USART_TX_vect) {
-    if (WriteBuffer.getSize() > 0) {
-        UDR0 = WriteBuffer.pop();
-    } else {
-        // Disable TX complete interrupt
-        UCSR0B &= ~(1 << TXCIE0);
-    }
-}
+//     // Enable RX complete interrupt
+//     UCSR0B |= (1 << RXCIE0);
+
+//     newLine = true;
+// }
+
+// ISR(USART0_TX_vect) {
+//     if (WriteBuffer.getSize() > 0) {
+//         UDR0 = WriteBuffer.pop();
+//     } else {
+//         // Disable TX complete interrupt
+//         UCSR0B &= ~(1 << TXCIE0);
+//     }
+// }

@@ -8,6 +8,8 @@
 extern CircularList<uint8_t> WriteBuffer;
 extern CircularList<uint8_t> ReadBuffer;
 
+extern volatile bool newLine;
+
 class MySerial {
 public:
     MySerial(uint32_t baudRate);
@@ -35,7 +37,6 @@ public:
     void println(int32_t data);
     void println(float data);
     void println(double data);
-
   
     int ReadBufferToChar(char* buffer);
 

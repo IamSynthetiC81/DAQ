@@ -1,11 +1,11 @@
+
 #include <avr/wdt.h>
 #include <avr/iom2560.h>
+#include <avr/interrupt.h>
 
 #include <stdbool.h>
 
-#include "src/MySerial/Serial.h"
-#include <HardwareSerial.h>
-#include <Arduino.h>
+// #include "src/MySerial/Serial.h"
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <u-blox_config_keys.h>
@@ -44,8 +44,6 @@ static bool SERIAL_BRIDGE = false;
 
 uint16_t TARGET_SAMPLING_RATE = 500;
 #define BAUD_RATE 250000
-
-static const MySerial srt(BAUD_RATE);
 
 /*  Button Declerations   */
 #define PIN_START_BUTTON 2
@@ -225,7 +223,7 @@ inline void __attribute__ ((always_inline)) SerialPrintLog(){
   __LOG.elapsedTime
   );
 
-  srt.println(buffer);
+  Serial.println(buffer);
 }
 inline void __attribute__ ((always_inline)) WriteToExternalMem(){
   uint8_t buffer[sizeof(log_t)];
@@ -322,14 +320,14 @@ void printPVTdata(UBX_NAV_PVT_data_t *ubxDataStruct){
     // Serial.print(F(" pDOP: "));
     // Serial.println(pDOP / 100.0, 2); // Convert pDOP scaling from 0.01 to 1
 
-  } else {
-    __LOG.Latitude = 0xffffffff;
-    __LOG.Longitude = 0xffffffff;
-    __LOG.Altitude = 0xffffffff;
-    __LOG.GroundSpeed = 0xffffffff;
-    __LOG.Heading = 0xffffffff;
-    srt.println("No fix ...");
-    delay(1000);
+//   } else {
+//     __LOG.Latitude = 0xffffffff;
+//     __LOG.Longitude = 0xffffffff;
+//     __LOG.Altitude = 0xffffffff;
+//     __LOG.GroundSpeed = 0xffffffff;
+//     __LOG.Heading = 0xffffffff;
+//     Serial.println("No fix ...");
+//     delay(1000);
 
   }
 }
@@ -364,24 +362,24 @@ bool initGPS(SFE_UBLOX_GNSS *myGNSS) {
     0xB5,0x62,0x06,0x8A,0x0C,0x00,0x01,0x01,0x00,0x00,0x01,0x00,0x52,0x40,0x00,0xC2,0x01,0x00,0xF4,0xB1,
   };
 
-  Serial1.begin(9600);
+  // Serial1.begin(9600);
 
   Stream *gps;
-  gps = &Serial1;
+  // gps = &Serial1;
 
   if (myGNSS->begin(*gps, 1100, false) == false){
-    srt.println("GPS not detected\n");
+    Serial.println("GPS not detected\n");
     return false;
   }
 
 
   // send configuration data in UBX protocol
   for(int i = 0; i < sizeof(CONFIG); i++) {                        
-    Serial1.write( pgm_read_byte(CONFIG+i) );
+    // Serial1.write( pgm_read_byte(CONFIG+i) );
     delay(5); // simulating a 38400baud pace (or less), otherwise commands are not accepted by the device.
   }
 
-  Serial1.setTimeout(100);
+  // Serial1.setTimeout(100);
 
   // Serial1.flush();
   // Serial1.begin(115200);
@@ -397,14 +395,14 @@ void MPU6050_init(){
 
   wdt_reset();
 
-  srt.print("Initializing I2C Drivers :");
+  Serial.print("Initializing I2C Drivers :");
   #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE                            // join I2C bus (I2Cdev library doesn't do this automatically)
     Wire.begin();
     Wire.setClock(400000);                                                    // 400kHz I2C clock. Comment this line if code is not compiling
-    srt.println("\t\tPASS");
+    Serial.println("\t\tPASS");
   #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
     Fastwire::setup(400, true);
-    srt.println("\t\tPASS");
+    Serial.println("\t\tPASS");
   #endif
 
   Wire.beginTransmission(0x68);                                               // Start I2C communication with the MPU6050
@@ -423,31 +421,31 @@ void MPU6050_init(){
   //   Wire.begin();
   // }
 
-  srt.print(" |--Initializing MPU6050");
+  Serial.print(" |--Initializing MPU6050");
   mpu.initialize();
-  srt.println("\t\tPASS");
+  Serial.println("\t\tPASS");
 
-  srt.print(" |--Testing device connection:");                         // verify connection
+  Serial.print(" |--Testing device connection:");                         // verify connection
   if (mpu.testConnection()){
-    srt.println("\t\tPASS"); 
+    Serial.println("\t\tPASS"); 
     IMU_present = true ;
     
-    srt.print(" |--Initializing DMP");                                // load and configure the DMP
+    Serial.print(" |--Initializing DMP");                                // load and configure the DMP
     devStatus = mpu.dmpInitialize();
   } else
-    srt.println("MPU6050 connection failed");
+    Serial.println("MPU6050 connection failed");
   
   if (devStatus == 0) {                                                       // make sure it worked (returns 0 if so)
 
     wdt_reset();
 
-    srt.println(" |--Calibrating:");                                    // Caibrate
+    Serial.println(" |--Calibrating:");                                    // Caibrate
     mpu.CalibrateAccel(15);                                                   // Calibration Time: generate offsets and calibrate our MPU6050
     mpu.CalibrateGyro(15);
 
-    srt.print("\n |--Enabling DMP:");
+    Serial.print("\n |--Enabling DMP:");
     mpu.setDMPEnabled(true);
-    srt.println("\t\t\tPASS"); 
+    Serial.println("\t\t\tPASS"); 
 
     packetSize = mpu.dmpGetFIFOPacketSize();                                  // get expected DMP packet size for later comparison
 
@@ -457,9 +455,9 @@ void MPU6050_init(){
     // 1 = initial memory load failed
     // 2 = DMP configuration updates failed
     // (if it's going to break, usually the code will be 1)
-    srt.print("DMP Initialization failed (code ");
-    srt.print(devStatus);
-    srt.println(")");
+    Serial.print("DMP Initialization failed (code ");
+    Serial.print(devStatus);
+    Serial.println(")");
   }
 }
 bool initTimers(uint16_t  freq){
@@ -589,7 +587,7 @@ ISR(ADC_vect){
 }
 
 // ISR(USART1_RX_vect){
-//   srt.ISR_RX;
+//   Serial.ISR_RX;
 // }
 
 // ISR(USART1_TX_vect){
@@ -640,16 +638,16 @@ void FUNC_DISABLE_PARALLEL(int argc, int argv){
   exportFunc = NULL;
 }
 void FUNC_GET_FREQUENCY(int argc, int argv){
-  srt.print("Sampling Frequency: ");
-  srt.println(TARGET_SAMPLING_RATE);
+  Serial.print("Sampling Frequency: ");
+  Serial.println(TARGET_SAMPLING_RATE);
 }
 void FUNC_SET_FREQUENCY(const int argc, char *argv[]){
   TARGET_SAMPLING_RATE = atoi(argv[0]);
 
   initTimers(TARGET_SAMPLING_RATE);
 
-  srt.print("Sampling Frequency set to: ");
-  srt.println(TARGET_SAMPLING_RATE);
+  Serial.print("Sampling Frequency set to: ");
+  Serial.println(TARGET_SAMPLING_RATE);
 }
 void FUNC_ENABLE_SD(int argc, int argv){
   exportFunc = WriteToSD;
@@ -675,22 +673,24 @@ command_t commands[] = {
 SERCOMM SerialCommander(commands, (sizeof(commands)/sizeof(commands[0])),30);
 
 void setup() {
-  // Serial.begin(BAUD_RATE);
+  Serial.begin(BAUD_RATE);
 
-  srt.println("\n\t!!-Initializing the DAQ System-!!");
-  srt.println("\n\t!!-Initializing the DAQ System-!!");
+  // attachInterrupt(USART1_RX_vect, customISR, ISR_PRIORITY);
+  // attachInterrupt(USART_TX_vect, customISR, ISR_PRIORITY);
 
-  if (TARGET_SAMPLING_RATE * sizeof(log_t) > BAUD_RATE/10 ){
-    srt.println("The baud rate is too low for the sampling rate");
-    srt.println("Increase the baud rate or decrease the sampling rate");
+  Serial.println("\n\t!!-Initializing the DAQ System-!!");
 
-    // srt.println("Baud rate must be larger than : " + String(__SAMPLING_RATE__ * sizeof(log_t)*8) + '\n');
-  }
+  // if (TARGET_SAMPLING_RATE * sizeof(log_t) > BAUD_RATE/10 ){
+  //   Serial.println("The baud rate is too low for the sampling rate");
+  //   Serial.println("Increase the baud rate or decrease the sampling rate");
+
+  //   // Serial.println("Baud rate must be larger than : " + String(__SAMPLING_RATE__ * sizeof(log_t)*8) + '\n');
+  // }
 
   exportFunc = NULL;
 
   /* Pin declerations */
-  srt.print("Initializing pins ");
+  Serial.print("Initializing pins ");
   pinMode(PIN_START_BUTTON, INPUT_PULLUP);
   pinMode(PIN_STOP_BUTTON, INPUT_PULLUP);
   pinMode(PIN_RESET_BUTTON, INPUT_PULLUP);
@@ -699,62 +699,62 @@ void setup() {
   digitalWrite(LED,HIGH);
   delay(500);
   digitalWrite(LED,LOW);
-  srt.println("\t\t\tPASS");
+  Serial.println("\t\t\tPASS");
 
-  srt.print("Initializing pins ");
+  Serial.print("Initializing pins ");
   ADC_init();
-  srt.println("\t\t\tPASS");
+  Serial.println("\t\t\tPASS");
 
-  srt.print("Initializing Watchdog :");
+  Serial.print("Initializing Watchdog :");
   wdt_enable(WDTO_8S);                                                        // Enable watchdog with a 4-second timeout
-  srt.println("\t\t\tPASS");
+  Serial.println("\t\t\tPASS");
 
-  srt.println("Initializing IMU :");
+  Serial.println("Initializing IMU :");
   MPU6050_init();                                                             // Initialize the MPU6050
 
   wdt_reset();                                                                // Reset the watchdog timer
 
-  srt.print("\nInitializing SD card :");
+  Serial.print("\nInitializing SD card :");
   if (!SD.begin(53) && SD_LOGGIN) {                                           // SD card initialization
     // ERROR = true;
     // ErrorFlag = 0x05;
-    srt.println("SD initialization failed!\n\tFix and reboot to contrinue\n");
+    Serial.println("SD initialization failed!\n\tFix and reboot to contrinue\n");
     return;
   }
 
   wdt_reset();                                                                // Reset the watchdog timer
 
   dataFile = SD.open("data.txt", FILE_WRITE);                                 // Open the data file
-  dataFile ? srt.println("\t\t\tPASS") : srt.println("\t\t\t|--FAIL--|");
+  dataFile ? Serial.println("\t\t\tPASS") : Serial.println("\t\t\t|--FAIL--|");
 
   wdt_reset();                                                                // Reset the watchdog timer
 
-  srt.print("Initializing GPS :");
+  Serial.print("Initializing GPS :");
   initGPS(&myGNSS);
-  srt.println("\t\t\tPASS");
+  Serial.println("\t\t\tPASS");
 
   wdt_reset();                                                                // Reset the watchdog timer
 
-  srt.print("Setting up the interrupts :");
+  Serial.print("Setting up the interrupts :");
   attachInterrupt(digitalPinToInterrupt(PIN_START_BUTTON), ISR_startRecording, FALLING);
   attachInterrupt(digitalPinToInterrupt(PIN_STOP_BUTTON), ISR_stopRecording, FALLING);
-  srt.println("\t\tPASS ");
+  Serial.println("\t\tPASS ");
 
   wdt_reset();                                                                // Reset the watchdog timer
 
-  srt.print("Initializing Timers :");
+  Serial.print("Initializing Timers :");
   if (initTimers(__SAMPLING_RATE__)){
-    srt.println("\t\t\tPASS");
+    Serial.println("\t\t\tPASS");
   } else {
     // ERROR = true;
     // ErrorFlag = 0x01;
-    srt.println("\t\t|--FAIL--|");
+    Serial.println("\t\t|--FAIL--|");
   }
 
   wdt_reset();                                                                // Reset the watchdog timer
 
-  srt.println("\n\t!!-Initialization complete-!!");
-  // srt.flush();
+  Serial.println("\n\t!!-Initialization complete-!!");
+  // Serial.flush();
 }
 
 void loop()	{
@@ -764,28 +764,42 @@ void loop()	{
   // if (!SD_present) return;
   if	(recording)	{
     if (!SAMPLE_WINDOW) return;
-    
+
     digitalWrite(46,HIGH);
     readGPS();			                                                          // Wait	for	VTG	messsage and print speed in	Serial.	 
 
-    // srt.print(const char *str)
+    Serial.print(__LOG.GroundSpeed);
+    Serial.print(__LOG.Heading);
+    Serial.print(__LOG.Longitude);
+    Serial.print(__LOG.Latitude);
+    Serial.print(__LOG.Altitude);
 
-    // if(Serial.available()){
-      
-    //   char buffer[256];
-    //   size_t size = Serial.readBytesUntil('\n', buffer , 256);
-    //   SERCOMM_handler(buffer);
-    // }
-    
-    
     /*  Read data from	MPU6050 */
     mpu.getMotion6(&__LOG.accelerationX, &__LOG.accelerationY, &__LOG.accelerationZ, &__LOG.gyroX, &__LOG.gyroY, &__LOG.gyroZ);
-     
+
+    Serial.print(__LOG.accelerationX);
+    Serial.print(__LOG.accelerationY);
+    Serial.print(__LOG.accelerationZ);
+
+    Serial.print(__LOG.gyroX);
+    Serial.print(__LOG.gyroY);
+    Serial.print(__LOG.gyroZ);
+
     readVariousSensors();
     
-    exportFunc();                                                               // Export data
+    Serial.print(__LOG.BrakePressure);
+    Serial.print(__LOG.SteeringWheel);
+    Serial.print(__LOG.ThrottlePositionSensor);
+    Serial.print(__LOG.CounterPulses);
+    Serial.print(__LOG.Vref);
+    
+
+
+    // exportFunc();                                                               // Export data
 
     __LOG.elapsedTime = micros() - StartTime;                                   // Calculate the elapsed time   
+
+    Serial.print(__LOG.elapsedTime);
 
     SAMPLE_WINDOW = false;                                                      // Close the "Window"
   
