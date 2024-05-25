@@ -33,7 +33,6 @@ void SERCOMM::handler(const char* message, size_t len){
   // copy message to the end of buffer
   memcpy(buffer + bufferIndex, message, len);
   
-  // parse each command
   for(int i = 0; i < commandsSize ; i++){                                    // Go through the commands
     if (strncmp(buffer, commands[i].command, strlen(commands[i].command)) == 0){ // Check if the command is in the buffer
       if (buffer[strlen(commands[i].command)] == ' '){                        // Check if there is a space after the command

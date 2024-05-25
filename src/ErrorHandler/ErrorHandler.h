@@ -1,8 +1,8 @@
 #ifndef ERROR_HANDLER_H
 #define ERROR_HANDLER_H
 
-#include "../../ErrorRegister/src/ErrorRegister.h"
-#include "../../general/src/general.h"
+#include "../ErrorRegister/src/ErrorRegister.h"
+#include "../general/src/general.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>

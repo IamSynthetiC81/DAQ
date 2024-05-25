@@ -5,8 +5,6 @@
 #include "../../general/src/general.h"
 #include <string.h>
 
-
-
 typedef struct command{
   void (*function)(const int argc, char *argv[]);
   char command[16];
