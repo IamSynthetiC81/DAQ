@@ -2,8 +2,8 @@
 #include <stdio.h>
 #include <avr/interrupt.h>
 
-CircularList<uint8_t> WriteBuffer(128);
-CircularList<uint8_t> ReadBuffer(128);
+RingList<uint8_t> WriteBuffer(128);
+RingList<uint8_t> ReadBuffer(128);
 
 volatile bool newLine = false;
 

@@ -3,10 +3,10 @@
 #include <stdint.h>
 #include <avr/io.h>
 
-#include "../CircularList/CircularList.h"
+#include "../RingList/RingList.h"
 
-extern CircularList<uint8_t> WriteBuffer;
-extern CircularList<uint8_t> ReadBuffer;
+extern RingList<uint8_t> WriteBuffer;
+extern RingList<uint8_t> ReadBuffer;
 
 extern volatile bool newLine;
 
