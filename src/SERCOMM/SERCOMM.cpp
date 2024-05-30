@@ -1,8 +1,11 @@
 #include "SERCOMM.h"
+#include <assert.h>
+#include <stdlib.h>
 
-SERCOMM::SERCOMM(command_t commands[], size_t commandsSize, ErrorRegister *ERREG = nullptr){
-  assert_msg(commands != NULL, "Commands are NULL");
-  assert_msg(commandsSize > 0, "Commands size is 0");
+SERCOMM::SERCOMM(command_t commands[], size_t commandsSize){
+  assert(commands != NULL);
+  assert(commands != NULL);
+  assert(commandsSize > 0);
 
   this->commandsSize = commandsSize;
   this->commands = new command_t[this->commandsSize];
@@ -15,53 +18,47 @@ SERCOMM::SERCOMM(command_t commands[], size_t commandsSize, ErrorRegister *ERREG
   this->ERREG = ERREG;
 }
 
-// void SERCOMM::handler(const char* message, size_t len){
-//   if (bufferIndex + len > BufferSize){
-//     memset(buffer, '\0', BufferSize);
-//     return;
-//   } else if (len == 0){
-//     return;
-//   } 
 
-//   // copy message to the end of buffer
-//   memcpy(buffer + bufferIndex, message, len);
+#if ERROR_REG_REPORT
+SERCOMM::SERCOMM(command_t commands[], size_t commandsSize, ErrorRegister *ERREG = nullptr){
+  assert(commands != NULL);
+  assert(commandsSize > 0);
+
+  this->commandsSize = commandsSize;
+  this->commands = new command_t[this->commandsSize];
   
-//   for(int i = 0; i < commandsSize ; i++){                                    // Go through the commands
-//     if (strncmp(buffer, commands[i].command, strlen(commands[i].command)) == 0){ // Check if the command is in the buffer
-//       if (buffer[strlen(commands[i].command)] == ' '){                        // Check if there is a space after the command
-//         char *argv[10];                                                       // Create an array of arguments
-//         int argc = 0;                                                         // Create a counter for the arguments
-//         char *token = strtok(buffer, " ");                                    // Tokenize the buffer
-//         while (token != NULL){                                                // While there are tokens
-//           argv[argc] = token;                                                 // Add the token to the arguments
-//           argc++;                                                             // Increment the argument counter
-//           token = strtok(NULL, " ");                                          // Get the next token
-//         }
-//         commands[i].function(argc, argv);                                     // Call the function with the arguments
+  // Copy contents of the commands array
+  for (size_t i = 0; i < this->commandsSize; ++i) {
+    this->commands[i] = commands[i];
+  }
+  
+  this->ERREG = ERREG;
+}
+#endif
 
-//         memset(buffer,'\0', BufferSize);                                      // Clear the buffer
-//         bufferIndex = 0;                                                      // Reset the buffer index
-//         return;
-//       }
-//     }
-//   }
-// }
+command_t SERCOMM::handleCommand(const char message[], size_t len){
+  assert(message != NULL);
 
-command_t SERCOMM::handleCommand(const char* message, size_t len){
+  char _message[len];
+  strncpy(_message, message, len);
+
   command_t c;
   c.function = NULL;
   c.command[0] = '\0';
   c.message[0] = '\0';
+  c.argc = 0;
+  *c.argv = nullptr;
 
   if (len == 0) return c;
 
-  for(int i = 0; i < commandsSize ; i++){                                           // Go through the commands
-    if (strncmp(message, commands[i].command, strlen(commands[i].command)) == 0){   // Check if the command is in the buffer
+  for(unsigned int i = 0; i < commandsSize ; i++){                                  // Go through the commands
+    if (strncmp(_message, commands[i].command, strlen(commands[i].command)) == 0){  // Check if the command is in the buffer
       char *argv[10];                                                               //    Create an array of arguments
-      memset(argv, '\0', 10);                                                       //    Clear the arguments
+      // argv = nullptr;                                                               //    Set the first argument to NULL  
+      memset(argv, '\0', sizeof(*argv));                                            //    Clear the arguments
       int argc = 0;                                                                 //    Create a counter for the arguments
-      if (message[strlen(commands[i].command)] == ' '){                             //    Check if there is a space after the command
-        char *token = strtok(message, " ");                                         //      Tokenize the buffer
+      if (_message[strlen(commands[i].command)] == ' '){                            //    Check if there is a space after the command
+        char *token = strtok(_message, " ");                                        //      Tokenize the buffer
         while (token != NULL){                                                      //      While there are tokens
           argv[argc] = (char *)malloc(strlen(token) + 1);
           argv[argc] = token;                                                       //        Add the token to the arguments
@@ -81,12 +78,9 @@ command_t SERCOMM::handleCommand(const char* message, size_t len){
 }
 
 command_t initCommand(void (*func)(const int argc, char *argv[]), char command[], char message[]){
-  assert_msg(func != NULL, "Function is NULL");
-  assert_msg(command != NULL, "Command is NULL");
-  assert_msg(message != NULL, "Message is NULL");
-
-  assert_msg_var(strlen(command) > 64, "Command is too long" , command);
-  assert_msg_var(strlen(message) > 40, "Message is too long", message);
+  assert(func != NULL);
+  assert(command != NULL);
+  assert(message != NULL);
   
   command_t c;
   c.function = func;

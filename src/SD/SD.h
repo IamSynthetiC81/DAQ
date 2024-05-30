@@ -1,20 +1,19 @@
-#pragma once
+#ifndef SD_H
+#define SD_H
 
-// #include <BufferedPrint.h>
-// #include <FreeStack.h>
-// #include <MinimumSerial.h>
-// #include <RingBuf.h>
-// #include <SdFat.h>
-// #include <SdFatConfig.h>
-
-// #include "../SdFat/src/FreeStack.h"
-// #include <ExFatLogger.h>
 #include <FreeStack.h>
 #include <SdFat.h>
-// #include <sdios.h>
-// #include <SPI.h>
 
 #include "../Definitions/Packet.h"
+
+//------------------------------------------------------------------------------
+// Set ENABLE_ERROR_HANDLING nonzero to enable error handling through the SD_error.h library.
+#define ENABLE_ERROR_HANDLING 1
+#if ENABLE_ERROR_HANDLING
+	#include "SD_error.h"
+	#include "../ErrorRegister/ErrorRegister.h"
+	extern ErrorRegister ERROR_REGISTER_SD;
+#endif  // ENABLE_ERROR_HANDLING
 
 
 //------------------------------------------------------------------------------
@@ -128,7 +127,6 @@ class SD{
 		~SD();
     
 		bool logData(Packet data);
-
 		
 	private:
 		file_t csvFile;
@@ -143,3 +141,5 @@ class SD{
 
 		bool createCsvFile(const char* name);
 };
+
+#endif  // SD_H

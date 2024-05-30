@@ -1,6 +1,6 @@
-#include <stdio.h>
+// #include <stdio.h>
 #include <Arduino.h>
-#include <avr/wdt.h>
+// #include <avr/wdt.h>
 
 
 #define EXIT_SUCCESS 0
@@ -10,7 +10,7 @@
 #define assert_msg(condition, message) if (!(condition)) Serial.print(message);
 #define assert_msg_var(condition, message, var) if (!(condition)) Serial.println(String(message) + var);
 
-#define error(message) Serial.println(message);
+#define ERROR(message) Serial.println(message);
 // #define error_set(message, errorreg, bit) Serial.println(\n\tmessage\n);
 // #define error_setb(message, errorreg, bit) Serial.println(\n\tmessage\n);
 

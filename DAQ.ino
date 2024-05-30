@@ -2,15 +2,16 @@
 #include <u-blox_config_keys.h>
 #include <u-blox_structs.h>
 
+#include <avr/wdt.h>
+
 #include <I2Cdev.h>
 #include <Wire.h>
 #include <SPI.h>
 
-#include "src/SD/SD.h"
+#include "src/Definitions.h"
 
 #include "src/IMU/IMU.h"
-
-#include "src/Definitions.h"
+#include "src/SD/SD.h"
 
 #define BAUD_RATE 250000
 

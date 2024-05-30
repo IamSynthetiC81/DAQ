@@ -1,4 +1,5 @@
-#pragma once
+#ifndef RINGLIST_H
+#define RINGLIST_H
 
 #include <stdint.h>
 
@@ -15,23 +16,20 @@ public:
 
     bool isFull();
     bool isEmpty();
+
 private:
-    uint8_t LIST_MAX_SIZE = 10;
+    const uint8_t LIST_MAX_SIZE;
     T* list;
 
-    uint8_t head = 0;
-    uint8_t tail = 0;
+    uint8_t head;
+    uint8_t tail;
 
-    uint8_t size = 0;
+    uint8_t size;
 };
 
 template <typename T>
-RingList<T>::RingList(uint8_t size) {
-    this->LIST_MAX_SIZE = size;
-    this->list = new T[this->LIST_MAX_SIZE];
-    this->head = 0;
-    this->tail = 0;
-    this->size = 0;
+RingList<T>::RingList(uint8_t size) 
+    : LIST_MAX_SIZE(size), list(new T[size]), head(0), tail(0), size(0) {
 }
 
 template <typename T>
@@ -52,7 +50,12 @@ uint8_t RingList<T>::push(T data) {
 
 template <typename T>
 T RingList<T>::pop() {
-    if (this->isEmpty()) return 0;  // Assuming T can be zero-initialized
+    if (this->isEmpty()) {
+        // Handle the case when the list is empty
+        // Depending on your use case, you might throw an exception,
+        // return a default-constructed T, or handle it differently
+        return T(); // Return default-constructed T
+    }
 
     T data = this->list[this->head];
     this->head = (this->head + 1) % this->LIST_MAX_SIZE;
@@ -75,3 +78,5 @@ template <typename T>
 bool RingList<T>::isEmpty() {
     return this->size == 0;
 }
+
+#endif  // RINGLIST_H

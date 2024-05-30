@@ -2,7 +2,6 @@
 #define ERROR_HANDLER_H
 
 #include "../ErrorRegister/ErrorRegister.h"
-#include "../general/general.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>

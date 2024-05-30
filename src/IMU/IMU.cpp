@@ -1,4 +1,5 @@
 #include "IMU.h"
+#include <avr/wdt.h>
 
 bool IMU::init(){
 	uint8_t devStatus;                                                          // return status after each device operation (0 = PASS, !0 = error)

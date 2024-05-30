@@ -1,7 +1,9 @@
+#include "Definitions/Packet.h"
+
 #include "ErrorHandler/ErrorHandler.h"
 #include "SERCOMM/SERCOMM.h"
 
-#include "Definitions/Packet.h"
+
 
 uint16_t TARGET_SAMPLING_RATE = 500;
 volatile uint8_t ADC_MUX_SELECT = 0x00;
@@ -91,7 +93,7 @@ ErrorRegister ERROR_TIMER;
 ErrorRegister ERROR_ADC;
 ErrorRegister ERROR_IMU;
 ErrorRegister ERROR_GPS;
-ErrorRegister ERROR_SD;
+// ErrorRegister ERROR_SD;
 ErrorRegister ERROR_SERIAL;
 
 ErrorRegister errorRegisters[] = {
@@ -99,7 +101,7 @@ ErrorRegister errorRegisters[] = {
   ERROR_ADC,
   ERROR_IMU,
   ERROR_GPS,
-  ERROR_SD,
+  // ERROR_SD,
   ERROR_SERIAL
 };
 

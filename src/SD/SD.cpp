@@ -1,5 +1,9 @@
 #include "SD.h"
 
+#ifdef ENABLE_ERROR_HANDLING
+	ErrorRegister ERROR_REGISTER_SD = ErrorRegister();
+#endif  // SD_ERROR_H
+
 #include "../general/general.h"
 
 SD::SD(const char* name) {
@@ -11,7 +15,10 @@ SD::SD(const char* name) {
 
 	strcpy(LOG_FILE_NAME, name);
 	if (!createCsvFile(LOG_FILE_NAME)) {
-		error(F("Failed to create CSV file"));
+		ERROR(F("Failed to create CSV file"));
+		#if ENABLE_ERROR_HANDLING
+			ERROR_REGISTER_SD.SET(SD_ERROR_CREATE_CSV_FILE);
+		#endif
 	}
 }
 
@@ -33,7 +40,7 @@ bool SD::logData(Packet data){
 //------------------------------------------------------------------------------
 void SD::Write(Packet *data, unsigned int size) {
   if (!csvFile.isOpen()) {
-		error(F("No current CSV file"));
+		ERROR(F("No current CSV file"));
 		return;
 	}
 
@@ -49,7 +56,10 @@ void SD::Write(Packet *data, unsigned int size) {
 		strcat(buffer, "\r\n");
 
 		if (len > 512) {
-			error(F("Buffer overflow"));
+			ERROR(F("Buffer overflow"));
+			#if ENABLE_ERROR_HANDLING
+				ERROR_REGISTER_SD.SET(SD_ERROR_BUFFER_OVERFLOW);
+			#endif
 			return;
 		}
 
@@ -64,7 +74,10 @@ bool SD::createCsvFile(const char* name) {
 	log(csvName);
 
 	if(!csvFile.open(csvName, O_CREAT | O_WRITE | O_EXCL)){
-		error("open csv failed");
+		ERROR("open csv failed");
+		#if ENABLE_ERROR_HANDLING
+			ERROR_REGISTER_SD.SET(SD_ERROR_CREATE_CSV_FILE);
+		#endif
 		return EXIT_FAILURE;
 	}
   
