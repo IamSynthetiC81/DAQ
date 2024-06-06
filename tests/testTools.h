@@ -1,7 +1,6 @@
 #include <iostream>
 #include <cassert>
 
-
 // Define color codes
 #define RED     "\x1b[31m"
 #define GREEN   "\x1b[32m"
@@ -16,4 +15,9 @@ void print_result(bool success) {
     }
 }
 
-#define _assert(x) assert(x); print_result(x)
+#ifdef FAIL_ON_ERROR
+    #define assert(x) assert_perror(x)
+#else
+    #define _assert(x) print_result(x)
+    #define assert(x) if(!x) std::cout << "Assertion failed: " << #x << std::endl; 
+#endif

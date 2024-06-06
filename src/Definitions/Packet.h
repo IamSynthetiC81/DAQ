@@ -41,7 +41,7 @@ class Packet{
 		long Latitude;
 		long Longitude;
 		long Altitude;
-		long elapsedTime;
+		uint64_t elapsedTime;
 
 		uint16_t toChar(char* buffer){
 			uint16_t i = 0;
@@ -63,5 +63,29 @@ class Packet{
 			i += sprintf(buffer + i, "%ld,", Altitude);
 			i += sprintf(buffer + i, "%ld,", elapsedTime);
 			return i;
+		}
+
+		uint8_t MAX_STR_SIZE(){
+			uint8_t num_of_int16_t = 6;
+			uint8_t num_of_unsigned_int16_t = 5;
+			uint8_t num_of_uint64_t = 1;
+			uint8_t num_of_long = 5;
+			
+			size_t size = 0;
+
+			char buffer[15];
+			snprintf(buffer, 15, "%d,", INT16_MAX);
+			size += (strlen(buffer)*num_of_int16_t);
+
+			snprintf(buffer, 15, "%d,", UINT16_MAX);
+			size += (strlen(buffer)*num_of_unsigned_int16_t);
+
+			snprintf(buffer, 15, "%ld,", UINT64_MAX);
+			size += (strlen(buffer)*num_of_uint64_t);
+
+			snprintf(buffer, 15, "%ld,", INT64_MAX);
+			size += (strlen(buffer)*num_of_long);
+
+			return size;
 		}
 };

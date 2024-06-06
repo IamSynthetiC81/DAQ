@@ -12,8 +12,8 @@ typedef struct command{
   void (*function)(const int argc, char *argv[]);
   char command[40];
   char message[64];
-  int argc;
-  char *argv[10];
+  uint8_t argc;
+  char **argv;
 }command_t;
 
 command_t initCommand(void (*func)(const int argc, char *argv[]), char command[], char message[]);
@@ -21,14 +21,18 @@ command_t initCommand(void (*func)(const int argc, char *argv[]), char command[]
 class SERCOMM {
   public:
     SERCOMM(command_t commands[], size_t commandsSize);
+    ~SERCOMM();
 
     #if ERROR_REG_REPORT
       SERCOMM(command_t commands[], size_t commandsSize, ErrorRegister *ERREG);
     #endif
     
-    command_t handleCommand(const char message[], size_t len);
-  private:
-    size_t commandsSize;
+    command_t handleCommand(char message[], size_t len);
+		
+    void cleanupCommand(command_t &c);
+
+	private:
+		size_t commandsSize;
 
   #if ERROR_REG_REPORT
     ErrorRegister *ERREG;

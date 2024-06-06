@@ -2,10 +2,12 @@
 
 #include "ErrorHandler/ErrorHandler.h"
 #include "SERCOMM/SERCOMM.h"
+#include "SD/SD.h"
 
 
+MySD sd = MySD(53);
 
-uint16_t TARGET_SAMPLING_RATE = 500;
+uint16_t TARGET_SAMPLING_RATE = 200;
 volatile uint8_t ADC_MUX_SELECT = 0x00;
 
 //////////////////////////////////////////
@@ -135,6 +137,10 @@ inline void __attribute__ ((always_inline)) WriteToExternalMem(){
   PORTA = 0x00;
 }
 inline void __attribute__ ((always_inline)) WriteToSD(){  
+  char buffer[124];
+  size_t len = packt.toChar(buffer);
+  
+  sd.log(buffer, len);
 }
 inline void __attribute__ ((always_inline)) VoidExportFunc(){
   return;
@@ -236,7 +242,7 @@ void ISR_stopRecording(){
   digitalWrite(LED_BUILTIN, LOW);
   TIMSK1 &= B11011000;                                                        // Disable Timer1
 
-  // dataFile.close();
+  sd.close();
 }
 
 ISR(TIMER1_COMPA_vect){

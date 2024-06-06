@@ -11,7 +11,6 @@
 #include "src/Definitions.h"
 
 #include "src/IMU/IMU.h"
-#include "src/SD/SD.h"
 
 #define BAUD_RATE 250000
 
@@ -31,7 +30,6 @@
 #define PIN_STEERING_WHEEL A1
 #define PIN_BRAKE_PRESSURE A2
 #define PIN_TROTTLE_POSITION_SENSOR A3
-
 
 /*          LED         */
 #define LED LED_BUILTIN
@@ -168,13 +166,11 @@ inline void __attribute__ ((always_inline))  readVariousSensors(){
   ADCSRA |= (1 << ADSC);  
 }
 
-
-
 void setup() {
   Serial.begin(BAUD_RATE);
   Serial.println("\n\t!!-Initializing the DAQ System-!!");
 
-  exportFunc = VoidExportFunc;
+  exportFunc = WriteToSD;
 
   /* Pin declerations */
   Serial.print("Initializing pins ");
@@ -197,22 +193,12 @@ void setup() {
   Serial.println("\t\t\tPASS");
 
   Serial.println("Initializing IMU :");
-  mpu.init();                                                             // Initialize the MPU6050
+  mpu.init(0x6A);                                                             // Initialize the MPU6050
 
   wdt_reset();                                                                // Reset the watchdog timer
 
   Serial.print("\nInitializing SD card :");
-  // if (!SD.begin(53)) {                                           // SD card initialization
-    // ERROR = true;
-    // ErrorFlag = 0x05;
-  //   Serial.println("SD initialization failed!\n\tFix and reboot to contrinue\n");
-  //   return;
-  // }
-
-  wdt_reset();                                                                // Reset the watchdog timer
-
-  // dataFile = SD.open("data.txt", FILE_WRITE);                                 // Open the data file
-  // dataFile ? Serial.println("\t\t\tPASS") : Serial.println("\t\t\t|--FAIL--|");
+  sd.init("data") ? Serial.println("\t\t\tPASS") : Serial.println("\t\t\t|--FAIL--|");
 
   wdt_reset();                                                                // Reset the watchdog timer
 
@@ -249,7 +235,9 @@ void loop()	{
   wdt_reset();                                                                // Reset the watchdog timer
 
   if(Serial.available()){
-    char buffer[32] = "\0";
+    char buffer[32];
+    memset(buffer,'\0',32);
+
     int len = Serial.readBytesUntil('\n',buffer, 32);
 
     command_t command = SerialCommander.handleCommand(buffer, len);
@@ -260,6 +248,8 @@ void loop()	{
     } else {
       Serial.println("invalid command");
     }
+
+    SerialCommander.cleanupCommand(command);
   }
   
   if	(recording)	{
